@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sistema de Orçamentos Públicos</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>" />
+</head>
+<body>
+
+<!-- ═══════════════════ HEADER ═══════════════════ -->
+<header class="header">
+  <div class="header-logo">🏛️</div>
+  <div class="header-text">
+    <h1>Sistema de Orçamentos Públicos</h1>
+    <p>Busca inteligente de fornecedores para compras públicas</p>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-outline" onclick="abrirModalBuscasSalvas()" style="color:#fff;border-color:rgba(255,255,255,.4);">
+      📂 Buscas Salvas
+    </button>
+    <button class="btn btn-outline" onclick="abrirModalConfig()" style="color:#fff;border-color:rgba(255,255,255,.4);">
+      ⚙️ Configurações
+    </button>
+  </div>
+</header>
+
+<!-- ═══════════════════ STEPPER ═══════════════════ -->
+<div class="stepper">
+  <div class="step ativo" id="step-1">
+    <div class="step-circle">1</div>
+    <div class="step-label">Identificar<br>Necessidade</div>
+  </div>
+  <div class="step-line" id="line-1"></div>
+  <div class="step" id="step-2">
+    <div class="step-circle">2</div>
+    <div class="step-label">Selecionar<br>CATMAT/CATSER</div>
+  </div>
+  <div class="step-line" id="line-2"></div>
+  <div class="step" id="step-3">
+    <div class="step-circle">3</div>
+    <div class="step-label">Buscar<br>Empresas</div>
+  </div>
+  <div class="step-line" id="line-3"></div>
+  <div class="step" id="step-4">
+    <div class="step-circle">✓</div>
+    <div class="step-label">Resultados</div>
+  </div>
+</div>
+
+<!-- ═══════════════════ MAIN ═══════════════════ -->
+<main class="main">
+
+  <!-- ──────── ETAPA 1: Tipo e busca ──────── -->
+  <div id="etapa-1">
+    <div class="card">
+      <div class="card-title"><span class="icon">📋</span> O que você precisa encontrar?</div>
+
+      <div class="tipo-selector">
+        <div class="tipo-card" id="card-catmat" onclick="selecionarTipo('material')">
+          <div class="tipo-icon">📦</div>
+          <div class="tipo-nome">Produto (CATMAT)</div>
+          <div class="tipo-desc">Materiais, equipamentos, insumos e bens em geral</div>
+        </div>
+        <div class="tipo-card" id="card-catser" onclick="selecionarTipo('servico')">
+          <div class="tipo-icon">🔧</div>
+          <div class="tipo-nome">Serviço (CATSER)</div>
+          <div class="tipo-desc">Serviços técnicos, manutenção, consultoria e afins</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="card-formulario" style="display:none">
+      <div class="card-title"><span class="icon">🔍</span> Descreva o que você precisa</div>
+
+      <!-- Modo de busca -->
+      <div class="form-group">
+        <label>Como deseja buscar?</label>
+        <div class="busca-modo-grid">
+          <div class="busca-modo-card selecionado" id="modo-nome" onclick="selecionarModoBusca('nome')">
+            <strong>🔤 Pelo Nome</strong>
+            <small>Informe o nome do produto ou serviço</small>
+          </div>
+          <div class="busca-modo-card" id="modo-descricao" onclick="selecionarModoBusca('descricao')">
+            <strong>📝 Pela Descrição</strong>
+            <small>Descreva o que precisa com suas palavras</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- Campo Nome (modo nome) -->
+      <div class="form-group" id="grupo-nome">
+        <label for="nome-item">Nome do <span id="label-tipo">produto/serviço</span> *</label>
+        <input type="text" id="nome-item" placeholder="Ex: Papel A4, Serviço de limpeza, Notebook..." />
+      </div>
+
+      <!-- Campo Descrição complementar (modo nome) -->
+      <div class="form-group" id="grupo-descricao-extra">
+        <label for="descricao-item">Descrição adicional (opcional)</label>
+        <textarea id="descricao-item" placeholder="Descreva características, especificações, marca preferida, quantidade estimada..."></textarea>
+      </div>
+
+      <!-- Campo Descrição livre (modo descrição) -->
+      <div class="form-group hidden" id="grupo-descricao-livre">
+        <label for="descricao-livre">Descreva o que você precisa *</label>
+        <textarea id="descricao-livre" rows="4"
+          placeholder="Ex: Preciso de resmas de papel tamanho A4 com 500 folhas para impressora laser. Gramatura 75g/m²..."></textarea>
+        <small style="color:var(--texto-leve);font-size:.78rem">
+          O sistema irá identificar automaticamente o código CATMAT/CATSER mais adequado.
+        </small>
+      </div>
+
+      <div class="flex gap-8 mt-16">
+        <button class="btn btn-primary w-full" onclick="buscarCatmat()" id="btn-buscar-cat">
+          🔍 Buscar no Catálogo do Governo
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ──────── ETAPA 2: Resultados CATMAT/CATSER ──────── -->
+  <div id="etapa-2" class="hidden">
+    <div class="card">
+      <div class="card-title">
+        <span class="icon">📋</span>
+        Selecione o item que melhor descreve sua necessidade
+        <span class="badge badge-catmat" id="badge-tipo">CATMAT</span>
+      </div>
+
+      <div id="loading-cat" class="loading hidden">
+        <div class="spinner"></div>
+        <span>Consultando o catálogo do governo federal...</span>
+      </div>
+
+      <div id="resultado-list" class="resultado-list"></div>
+
+      <!-- Fallback: sem resultados → pede descrição -->
+      <div id="sem-resultados-cat" class="hidden" style="margin-top:16px">
+        <div class="card" style="background:var(--amarelo-claro,#fffbea);border:1px solid #f0c040;padding:20px">
+          <p style="font-weight:600;margin-bottom:8px">⚠️ Nenhum resultado encontrado para o nome informado.</p>
+          <p style="font-size:.88rem;color:var(--texto-leve);margin-bottom:12px">
+            Tente buscar pela <strong>descrição</strong> do que você precisa:
+          </p>
+          <textarea id="descricao-fallback" rows="3"
+            placeholder="Descreva o produto ou serviço com mais detalhes..."
+            style="width:100%;box-sizing:border-box"></textarea>
+          <button class="btn btn-primary mt-16" onclick="buscarPorDescricaoFallback()">
+            🔍 Buscar pela Descrição
+          </button>
+        </div>
+      </div>
+
+      <div class="flex gap-8 mt-16">
+        <button class="btn btn-outline" onclick="voltarEtapa(1)">← Voltar</button>
+        <button class="btn btn-primary" id="btn-confirmar-cat" disabled onclick="confirmarCatmat()">
+          Confirmar Seleção →
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ──────── ETAPA 3: Busca de empresas ──────── -->
+  <div id="etapa-3" class="hidden">
+    <div class="card" id="card-item-selecionado"></div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">📍</span> Localização e raio de busca</div>
+
+      <div class="form-group">
+        <label for="cidade-input">Cidade *</label>
+        <input type="text" id="cidade-input" placeholder="Ex: Brasília, São Paulo, Belo Horizonte..." />
+      </div>
+
+      <div class="form-group">
+        <label for="estado-input">Estado (opcional)</label>
+        <select id="estado-input">
+          <option value="">— Selecione —</option>
+          <option>AC</option><option>AL</option><option>AP</option><option>AM</option>
+          <option>BA</option><option>CE</option><option>DF</option><option>ES</option>
+          <option>GO</option><option>MA</option><option>MT</option><option>MS</option>
+          <option>MG</option><option>PA</option><option>PB</option><option>PR</option>
+          <option>PE</option><option>PI</option><option>RJ</option><option>RN</option>
+          <option>RS</option><option>RO</option><option>RR</option><option>SC</option>
+          <option>SP</option><option>SE</option><option>TO</option>
+        </select>
+      </div>
+
+      <!-- Raio: botões fixos -->
+      <div class="form-group">
+        <label>Raio de busca</label>
+        <div class="raio-grid" id="raio-grid">
+          <button class="raio-btn" data-km="1"   onclick="selecionarRaio(1)">1 km</button>
+          <button class="raio-btn" data-km="3"   onclick="selecionarRaio(3)">3 km</button>
+          <button class="raio-btn" data-km="5"   onclick="selecionarRaio(5)">5 km</button>
+          <button class="raio-btn selecionado" data-km="10"  onclick="selecionarRaio(10)">10 km</button>
+          <button class="raio-btn" data-km="50"  onclick="selecionarRaio(50)">50 km</button>
+          <button class="raio-btn" data-km="200" onclick="selecionarRaio(200)">200 km</button>
+        </div>
+        <small style="color:var(--texto-leve);font-size:.78rem">
+          Raio a partir do centro da cidade selecionada
+        </small>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🎯</span> Tipo de busca</div>
+
+      <div class="busca-tipo-grid">
+        <div class="busca-tipo-card selecionado" id="card-exata" onclick="selecionarTipoBusca('exata')">
+          <div class="bt-titulo">🎯 Busca Exata</div>
+          <div class="bt-desc">Retorna apenas empresas que expressamente fornecem o produto ou executam o serviço. Resultados mais precisos, porém menos empresas.</div>
+        </div>
+        <div class="busca-tipo-card" id="card-similar" onclick="selecionarTipoBusca('similaridade')">
+          <div class="bt-titulo">🔄 Busca por Similaridade</div>
+          <div class="bt-desc">Retorna empresas possivelmente relacionadas. Resultados mais amplos, ideal quando há poucos fornecedores na região.</div>
+        </div>
+      </div>
+
+      <div class="flex gap-8 mt-16">
+        <button class="btn btn-outline" onclick="voltarEtapa(2)">← Voltar</button>
+        <button class="btn btn-primary w-full" onclick="buscarEmpresas()" id="btn-buscar-emp">
+          🏢 Buscar Empresas Fornecedoras
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ──────── ETAPA 4: Resultados ──────── -->
+  <div id="etapa-4" class="hidden">
+    <div id="loading-emp" class="loading hidden">
+      <div class="spinner"></div>
+      <span id="loading-emp-text">Buscando empresas na região...</span>
+    </div>
+
+    <div id="resultados-wrapper" class="hidden">
+      <!-- Resumo + Ações -->
+      <div class="card" style="padding:20px 28px">
+        <div class="acoes-bar">
+          <button class="btn btn-success" onclick="exportar('excel')">📊 Exportar Excel</button>
+          <button class="btn btn-warning" onclick="exportar('pdf')">📄 Exportar PDF</button>
+          <button class="btn btn-primary" onclick="salvarBusca()">💾 Salvar Busca</button>
+          <button class="btn btn-outline" onclick="voltarEtapa(3)">← Nova Busca</button>
+          <div class="resultados-info" id="resultados-info"></div>
+        </div>
+
+        <!-- Resumo da busca -->
+        <div id="resumo-busca" style="border-top:1px solid var(--cinza-borda);padding-top:14px;font-size:.83rem;color:var(--texto-leve)"></div>
+      </div>
+
+      <!-- Lista de empresas -->
+      <div id="empresa-grid" class="empresa-grid"></div>
+
+      <div id="sem-resultados" class="hidden card text-center" style="padding:48px">
+        <div style="font-size:3rem;margin-bottom:16px">🔍</div>
+        <h3 style="color:var(--texto-leve);font-weight:600">Nenhuma empresa encontrada</h3>
+        <p style="margin-top:8px;color:var(--texto-leve)">
+          Tente aumentar o raio de busca ou usar a busca por similaridade.
+        </p>
+        <button class="btn btn-primary mt-16" onclick="voltarEtapa(3)">Tentar novamente</button>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ═══════════════════ MODAL: BUSCAS SALVAS ═══════════════════ -->
+<div class="modal-overlay" id="modal-buscas">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>📂 Buscas Salvas</h2>
+      <button class="modal-close" onclick="fecharModal('modal-buscas')">✕</button>
+    </div>
+    <div id="lista-buscas-salvas">
+      <div class="loading"><div class="spinner"></div><span>Carregando...</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ MODAL: CONFIGURAÇÕES ═══════════════════ -->
+<div class="modal-overlay" id="modal-config">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>⚙️ Configurações</h2>
+      <button class="modal-close" onclick="fecharModal('modal-config')">✕</button>
+    </div>
+
+    <div class="config-row">
+      <span>🗺️</span>
+      <label>Google Maps API Key <strong style="color:var(--vermelho)">*</strong></label>
+    </div>
+    <div class="form-group">
+      <input type="password" id="config-maps-key" placeholder="AIzaSy... (Geocoding + Places API)" />
+      <small style="color:var(--texto-leve);font-size:.78rem">
+        Necessária para busca de empresas. Obtenha em
+        <a href="https://console.cloud.google.com/apis/credentials" target="_blank">console.cloud.google.com</a>
+        — ative Geocoding API e Places API.
+      </small>
+    </div>
+
+    <div class="flex gap-8 mt-16">
+      <button class="btn btn-primary w-full" onclick="salvarConfig()">💾 Salvar Configurações</button>
+    </div>
+    <p style="font-size:.75rem;color:var(--texto-leve);margin-top:10px;text-align:center">
+      A chave é salva apenas no seu navegador (localStorage), não é enviada ao servidor.
+    </p>
+  </div>
+</div>
+
+<!-- ═══════════════════ TOAST CONTAINER ═══════════════════ -->
+<div class="toast-container" id="toast-container"></div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>

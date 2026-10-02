@@ -1,0 +1,125 @@
+"""
+Algoritmo de cálculo de relevância para empresas.
+Score de 0 a 100 baseado em múltiplos fatores.
+"""
+import re
+from unidecode import unidecode
+from Levenshtein import ratio as lev_ratio
+
+
+# Mapeamento CATMAT/CATSER → tipos Google Places (para boost de score)
+TIPOS_GOOGLE_POR_CATEGORIA = {
+    # Materiais gerais
+    "material": [
+        "store", "hardware_store", "home_goods_store", "furniture_store",
+        "electronics_store", "clothing_store", "supermarket", "shopping_mall",
+        "establishment",
+    ],
+    # Serviços gerais
+    "servico": [
+        "plumber", "electrician", "general_contractor", "painter",
+        "moving_company", "storage", "laundry", "car_repair",
+        "establishment", "point_of_interest",
+    ],
+}
+
+
+def _normalizar(texto: str) -> str:
+    return unidecode(texto or "").lower().strip()
+
+
+def _palavras_chave(nome_item: str) -> list[str]:
+    """Extrai palavras relevantes (> 3 chars) do nome do item."""
+    n = _normalizar(nome_item)
+    return [p for p in re.split(r"\W+", n) if len(p) > 3]
+
+
+def calcular_relevancia(
+    empresa: dict,
+    nome_item: str,
+    tipo_cat: str,  # "CATMAT" | "CATSER"
+    tipo_busca: str,  # "exata" | "similaridade"
+) -> int:
+    """
+    Calcula o percentual de relevância (0–100) de uma empresa para o item buscado.
+
+    Critérios:
+    ┌────────────────────────────────────────────────┬───────┐
+    │ Critério                                       │ Peso  │
+    ├────────────────────────────────────────────────┼───────┤
+    │ Palavras-chave no nome da empresa              │  25%  │
+    │ Palavras-chave no site / reviews               │  20%  │
+    │ Tipo Google Places compatível                  │  20%  │
+    │ Avaliação Google (proxy de qualidade)          │  15%  │
+    │ Quantidade de avaliações (proxy de maturidade) │  10%  │
+    │ Similaridade Levenshtein nome × item           │  10%  │
+    └────────────────────────────────────────────────┴───────┘
+    """
+    palavras = _palavras_chave(nome_item)
+    if not palavras:
+        return 50  # sem informação suficiente, score neutro
+
+    score = 0.0
+
+    # ── 1. Palavras-chave no nome da empresa (peso 25) ─────────────────────
+    nome_emp = _normalizar(empresa.get("nome", ""))
+    hits_nome = sum(1 for p in palavras if p in nome_emp)
+    score += (hits_nome / len(palavras)) * 25
+
+    # ── 2. Palavras-chave em site + reviews (peso 20) ─────────────────────
+    textos_extra = " ".join([
+        empresa.get("site", ""),
+        empresa.get("descricao", ""),
+        " ".join(empresa.get("reviews", [])),
+    ])
+    texto_extra_norm = _normalizar(textos_extra)
+    hits_extra = sum(1 for p in palavras if p in texto_extra_norm)
+    if palavras:
+        score += (hits_extra / len(palavras)) * 20
+
+    # ── 3. Tipos Google Places compatíveis (peso 20) ──────────────────────
+    tipo_key = "material" if tipo_cat == "CATMAT" else "servico"
+    tipos_esperados = TIPOS_GOOGLE_POR_CATEGORIA.get(tipo_key, [])
+    tipos_empresa = empresa.get("tipos", [])
+    compativel = any(t in tipos_esperados for t in tipos_empresa)
+    score += 20 if compativel else 0
+
+    # ── 4. Avaliação Google (peso 15) ─────────────────────────────────────
+    avaliacao = float(empresa.get("avaliacao_google") or empresa.get("avaliacao", 0))
+    # Normaliza: 5.0 → 15, 0 → 0
+    score += (avaliacao / 5.0) * 15
+
+    # ── 5. Quantidade de avaliações — proxy de maturidade (peso 10) ────────
+    qtd_aval = int(empresa.get("total_avaliacoes", 0))
+    if qtd_aval >= 100:
+        score += 10
+    elif qtd_aval >= 20:
+        score += 6
+    elif qtd_aval >= 5:
+        score += 3
+
+    # ── 6. Similaridade Levenshtein nome empresa × nome item (peso 10) ─────
+    lev = lev_ratio(nome_emp[:40], _normalizar(nome_item)[:40])
+    score += lev * 10
+
+    # ── Bônus: busca exata com palavras 100% presentes no nome ─────────────
+    if tipo_busca == "exata" and hits_nome == len(palavras):
+        score = min(score + 10, 100)
+
+    return min(int(round(score)), 100)
+
+
+def classificar_empresas(
+    empresas: list[dict],
+    nome_item: str,
+    tipo_cat: str,
+    tipo_busca: str,
+) -> list[dict]:
+    """
+    Aplica o cálculo de relevância em todas as empresas e ordena por score.
+    """
+    for emp in empresas:
+        emp["relevancia"] = calcular_relevancia(emp, nome_item, tipo_cat, tipo_busca)
+
+    empresas.sort(key=lambda e: e["relevancia"], reverse=True)
+    return empresas
