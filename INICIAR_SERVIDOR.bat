@@ -25,7 +25,7 @@ if not exist "%PYTHON%" (
 "%PYTHON%" -c "import fastapi, uvicorn, aiosqlite, httpx" 2>nul
 if errorlevel 1 (
     echo  [INFO] Instalando dependencias (aguarde)...
-    "%PYTHON%" -m pip install fastapi "uvicorn[standard]" httpx python-dotenv aiosqlite openpyxl reportlab python-multipart Levenshtein unidecode
+    "%PYTHON%" -m pip install fastapi "uvicorn[standard]" httpx python-dotenv aiosqlite openpyxl reportlab python-multipart unidecode
     echo.
 )
 

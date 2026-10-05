@@ -14,7 +14,12 @@ import re
 import sqlite3
 from pathlib import Path
 from unidecode import unidecode
-from Levenshtein import ratio as lev_ratio
+from difflib import SequenceMatcher
+
+
+def lev_ratio(s1: str, s2: str) -> float:
+    return SequenceMatcher(None, s1 or "", s2 or "").ratio()
+
 
 BASE_API = "https://dadosabertos.compras.gov.br"
 TIMEOUT  = 20.0

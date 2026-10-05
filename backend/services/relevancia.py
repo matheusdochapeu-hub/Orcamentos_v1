@@ -4,7 +4,12 @@ Score de 0 a 100 baseado em múltiplos fatores.
 """
 import re
 from unidecode import unidecode
-from Levenshtein import ratio as lev_ratio
+from difflib import SequenceMatcher
+
+
+def lev_ratio(s1: str, s2: str) -> float:
+    return SequenceMatcher(None, s1 or "", s2 or "").ratio()
+
 
 
 # Mapeamento CATMAT/CATSER → tipos Google Places (para boost de score)
