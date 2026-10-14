@@ -167,6 +167,7 @@ def _normalizar_item(item: dict, municipio_fallback="", uf_fallback="") -> dict:
     emp["endereco"] = ", ".join(p for p in [endereco, cidade_uf] if p)
 
     emp["telefone"] = _montar_telefone(item)
+    emp["telefone2"] = str(_primeiro(item, "telefone2", "ddd_telefone_2", default="")).strip()
     emp["email"] = _primeiro(item, "email", "correio_eletronico", default="")
     emp["situacao"] = str(_primeiro(item, "descricao_situacao_cadastral",
                                     "situacao_cadastral", "situacao", "status",
@@ -177,6 +178,19 @@ def _normalizar_item(item: dict, municipio_fallback="", uf_fallback="") -> dict:
     emp["cnae_principal"] = formatar_cnae(cnae)
     emp["cnae_descricao"] = _primeiro(item, "cnae_fiscal_descricao", "cnae_descricao",
                                       "primary_activity", default="")
+
+    # CNAEs secundários (MinhaReceita: lista de {codigo, descricao})
+    secundarios = _primeiro(item, "cnaes_secundarios", "cnaes_secundarias",
+                            "secondary_activities", default=[])
+    lista_sec = []
+    if isinstance(secundarios, list):
+        for s in secundarios:
+            if isinstance(s, dict):
+                cod = str(s.get("codigo") or s.get("code") or "")
+                desc = s.get("descricao") or s.get("text") or s.get("description") or ""
+                if cod:
+                    lista_sec.append({"codigo": formatar_cnae(cod), "descricao": desc})
+    emp["cnaes_secundarios"] = lista_sec
 
     emp["lat"] = _primeiro(item, "lat", "latitude", default=None) or None
     emp["lng"] = _primeiro(item, "lng", "longitude", default=None) or None

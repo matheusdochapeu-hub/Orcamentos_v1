@@ -417,6 +417,20 @@ textarea { resize: vertical; min-height: 80px; }
   padding: 2px 10px;
   border-radius: 999px;
 }
+
+/* Alerta: empresa impedida de contratar (CEIS/CNEP) */
+.emp-sancao {
+  display: inline-block;
+  margin-top: 5px;
+  margin-left: 6px;
+  font-size: .72rem;
+  font-weight: 800;
+  color: #b91c1c;
+  background: var(--vermelho-claro);
+  border: 1px solid #fca5a5;
+  padding: 2px 10px;
+  border-radius: 999px;
+}
 .empresa-endereco { font-size: .85rem; color: var(--texto-leve); margin-top: 8px; }
 
 .empresa-avaliacao { font-size: .82rem; color: #b45309; font-weight: 600; margin-top: 6px; }

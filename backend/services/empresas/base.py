@@ -30,15 +30,19 @@ def empresa_vazia() -> dict:
         "distancia_km": None,
         # Contato
         "telefone": "",
+        "telefone2": "",          # 2º telefone (quando houver)
         "whatsapp": "",
         "email": "",
         "site": "",
         # Atividade / classificação
         "cnae_principal": "",
         "cnae_descricao": "",
+        "cnaes_secundarios": [],   # lista de {codigo, descricao} (Receita)
         "tipos": [],              # tipos Google Places (quando aplicável)
         "situacao": "",           # ATIVA / etc. (Receita)
         "ja_forneceu": False,     # True se já forneceu o item ao poder público (PNCP)
+        "sancionada": None,       # True/False/None (None = não verificado)
+        "sancao_detalhe": "",     # texto do impedimento (CEIS/CNEP)
         # Qualidade / reputação (quando houver)
         "avaliacao_google": 0,
         "total_avaliacoes": 0,

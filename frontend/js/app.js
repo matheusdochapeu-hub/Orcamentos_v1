@@ -332,6 +332,7 @@ function montarBarraFiltros() {
   const ordem   = ESTADO.filtros?.ordem   || 'relevancia';
   const soTel   = ESTADO.filtros?.soTelefone || false;
   const chance  = ESTADO.filtros?.chanceMin || 0;
+  const temSancionadas = (ESTADO.empresasBase || []).some(e => e.sancionada);
   barra.innerHTML = `
     <div class="filtro-item">
       <label>Ordenar por</label>
@@ -357,6 +358,10 @@ function montarBarraFiltros() {
       <input type="checkbox" id="f-forneceu" ${ESTADO.filtros?.soForneceu?'checked':''} onchange="aplicarFiltros()">
       Só quem já forneceu
     </label>
+    ${temSancionadas ? `<label class="filtro-check">
+      <input type="checkbox" id="f-sancao" ${ESTADO.filtros?.ocultarSancionadas?'checked':''} onchange="aplicarFiltros()">
+      Ocultar impedidas
+    </label>` : ''}
     <div class="filtro-contagem" id="filtro-contagem"></div>
   `;
 }
@@ -367,6 +372,7 @@ function aplicarFiltros() {
     chanceMin:  parseInt(document.getElementById('f-chance')?.value || '0', 10),
     soTelefone: document.getElementById('f-tel')?.checked || false,
     soForneceu: document.getElementById('f-forneceu')?.checked || false,
+    ocultarSancionadas: document.getElementById('f-sancao')?.checked || false,
   };
   renderGridEmpresas();
 }
@@ -379,6 +385,7 @@ function renderGridEmpresas() {
   let lista = base.filter(emp => {
     if (f.soTelefone && !(emp.telefone && emp.telefone.trim())) return false;
     if (f.soForneceu && !emp.ja_forneceu) return false;
+    if (f.ocultarSancionadas && emp.sancionada) return false;
     if (f.chanceMin && Math.round(emp.relevancia || 0) < f.chanceMin) return false;
     return true;
   });
@@ -418,6 +425,8 @@ function cardEmpresa(emp) {
   const telRaw = (emp.telefone || '').trim();
   const telDigits = telRaw.replace(/\D/g, '');
   const stars = emp.avaliacao_google ? `⭐ ${Number(emp.avaliacao_google).toFixed(1)}` : '';
+  const tel2Digits = (emp.telefone2 || '').replace(/\D/g, '');
+  const tel2  = tel2Digits ? `<a href="tel:${tel2Digits}" class="emp-link">📞 ${escapeHtml(emp.telefone2)}</a>` : '';
   const wpp   = emp.whatsapp ? `<a href="https://wa.me/${emp.whatsapp.replace(/\D/g,'')}" target="_blank" class="emp-link">💬 WhatsApp</a>` : '';
   const site  = emp.site     ? `<a href="${encodeURI(emp.site)}" target="_blank" class="emp-link">🌐 Site</a>` : '';
   const email = emp.email    ? `<a href="mailto:${escapeAttr(emp.email)}" class="emp-link emp-link-secundario">✉️ ${escapeHtml(emp.email)}</a>` : '';
@@ -440,13 +449,16 @@ function cardEmpresa(emp) {
   const fornecBadge = emp.ja_forneceu
     ? `<span class="emp-forneceu" title="Já forneceu este tipo de item ao poder público">✓ já forneceu ao poder público</span>`
     : '';
+  const sancaoBadge = emp.sancionada
+    ? `<span class="emp-sancao" title="${escapeAttr(emp.sancao_detalhe || '')}">🚫 impedida de contratar (${escapeHtml(emp.sancao_detalhe || 'sancionada')})</span>`
+    : '';
 
   const cnpjLinha = emp.cnpj
     ? `<div class="empresa-cnpj">🧾 CNPJ: ${escapeHtml(emp.cnpj)}${emp.situacao ? ` · <span class="emp-situacao">${escapeHtml(emp.situacao)}</span>` : ''}</div>` : '';
   const cnaeLinha = emp.cnae_principal
     ? `<div class="empresa-cnae">🏷️ CNAE ${escapeHtml(emp.cnae_principal)}${emp.cnae_descricao ? ` — ${escapeHtml(emp.cnae_descricao)}` : ''}</div>` : '';
 
-  const extras = [wpp, site, email].filter(Boolean).join('');
+  const extras = [tel2, wpp, site, email].filter(Boolean).join('');
 
   return `
     <div class="empresa-card">
@@ -454,6 +466,7 @@ function cardEmpresa(emp) {
         <div>
           <div class="empresa-nome">${escapeHtml(nome)} ${distBadge}</div>
           ${fornecBadge}
+          ${sancaoBadge}
           ${subRazao}
         </div>
         <div class="empresa-rel ${relClass}" title="Chance de ter o produto: ${relRotulo}">${rel}%</div>
