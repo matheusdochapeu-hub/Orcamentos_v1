@@ -71,9 +71,8 @@ async def buscar_empresas_agregado(
         if prov.disponivel():
             ativos.append(nome)
         elif nome == "google":
-            avisos.append(
-                "Google Maps não configurado — usando apenas a base da Receita Federal."
-            )
+            # Esperado quando não há chave; marcado como interno (frontend oculta).
+            avisos.append("[interno] Google Maps não configurado.")
 
     if not ativos:
         # fallback garantido: Receita sempre está disponível
@@ -101,7 +100,9 @@ async def buscar_empresas_agregado(
 
     for nome, res in zip(ativos, resultados):
         if isinstance(res, Exception):
-            avisos.append(f"Fonte '{nome}' falhou: {res}")
+            # Mensagem amigável e visível ao usuário (não contém palavras que o
+            # frontend filtra). Serve de diagnóstico quando a busca falha.
+            avisos.append(f"⚠️ {res}")
             continue
         if res:
             fontes_usadas.append(nome)
