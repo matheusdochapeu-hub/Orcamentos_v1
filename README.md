@@ -45,13 +45,18 @@ ETAPA 4 → Lista de empresas fornecedoras com:
 
 ## Fontes de busca de empresas
 
-O sistema encontra fornecedores por **duas fontes**, selecionáveis na Etapa 3:
+O sistema busca fornecedores **automaticamente em todas as fontes disponíveis**
+e combina os resultados (deduplicando por CNPJ) — o usuário não precisa escolher
+nada. As fontes são:
 
 | Fonte | O que faz | Precisa de chave? |
 |-------|-----------|-------------------|
-| 🏛️ **Receita Federal** (padrão) | Lista empresas **ativas** da base CNPJ filtrando por **CNAE (atividade) + município + UF**. Inclui fabricantes, distribuidoras e atacadistas que não têm ficha no Google. | **Não** |
-| 🗺️ **Google Maps** | Estabelecimentos com ficha no Google (loja/vitrine), com avaliação e telefone. | Sim (opcional) |
-| 🔀 **Ambas** | Combina as duas e remove duplicatas (por CNPJ). | Usa o Google se houver chave |
+| 🏛️ **Receita Federal** (sempre usada) | Lista empresas **ativas** da base CNPJ filtrando por **CNAE (atividade) + município + UF**. Inclui fabricantes, distribuidoras e atacadistas que não têm ficha no Google. | **Não** |
+| 🗺️ **Google Maps** (usada se houver chave) | Enriquece os resultados com estabelecimentos do Google (avaliação, telefone). | Sim (opcional) |
+
+> A seleção de fonte **não aparece na tela**. Se uma chave do Google estiver
+> configurada, ela entra automaticamente na busca; caso contrário, o sistema
+> usa apenas a Receita, de forma transparente.
 
 Como o item CATMAT/CATSER escolhido vira uma busca de empresas: o sistema
 mapeia o item para um conjunto de **CNAEs** compatíveis
