@@ -9,6 +9,7 @@ const ESTADO = {
   modoBusca: 'nome',     // 'nome' | 'descricao'
   itemSelecionado: null, // { codigo, descricao, tipo }
   tipoBusca: 'exata',
+  fonte: 'receita',      // 'receita' | 'google' | 'ambas'
   raioKm: 10,
   empresas: [],
   buscaId: null,
@@ -202,6 +203,13 @@ function selecionarTipoBusca(tipo) {
   document.getElementById('card-similar').classList.toggle('selecionado', tipo === 'similaridade');
 }
 
+function selecionarFonte(fonte) {
+  ESTADO.fonte = fonte;
+  document.getElementById('fonte-receita').classList.toggle('selecionado', fonte === 'receita');
+  document.getElementById('fonte-google').classList.toggle('selecionado', fonte === 'google');
+  document.getElementById('fonte-ambas').classList.toggle('selecionado', fonte === 'ambas');
+}
+
 // ═══════════════════ ETAPA 4 — Busca de empresas ═════════════
 
 async function buscarEmpresas() {
@@ -211,10 +219,17 @@ async function buscarEmpresas() {
   if (!cidade) { toast('Informe a cidade', 'warn'); return; }
 
   const mapsKey = localStorage.getItem('maps_key') || '';
-  if (!mapsKey) {
-    toast('⚙️ Configure a Google Maps API Key primeiro!', 'warn');
-    abrirModalConfig();
-    return;
+  const fonte   = ESTADO.fonte || 'receita';
+
+  // A chave do Google só é obrigatória para fontes que usam o Google Maps.
+  if ((fonte === 'google' || fonte === 'ambas') && !mapsKey) {
+    if (fonte === 'google') {
+      toast('⚙️ A fonte "Google Maps" exige a chave. Configure-a ou use a fonte "Receita Federal".', 'warn');
+      abrirModalConfig();
+      return;
+    }
+    // fonte 'ambas' sem chave → segue só com a Receita (backend avisa)
+    toast('ℹ️ Sem chave do Google — buscando apenas na base da Receita Federal.', 'info');
   }
 
   irParaEtapa(4);
@@ -238,6 +253,7 @@ async function buscarEmpresas() {
         estado,
         raio_km:     ESTADO.raioKm,
         tipo_busca:  ESTADO.tipoBusca,
+        fontes:      fonte,
         maps_key:    mapsKey,
       }),
     });
@@ -259,8 +275,9 @@ async function buscarEmpresas() {
 
     const data = await resp.json();
     ESTADO.empresas     = data.empresas || [];
-    ESTADO.coordsBusca  = data.coords;
-    ESTADO.dadosBusca   = { cidade, estado, raio: ESTADO.raioKm, tipo_busca: ESTADO.tipoBusca };
+    ESTADO.fontesUsadas = data.fontes_usadas || [];
+    ESTADO.dadosBusca   = { cidade, estado, raio: ESTADO.raioKm, tipo_busca: ESTADO.tipoBusca, fonte };
+    (data.avisos || []).forEach(a => toast(a, 'info'));
     renderizarEmpresas(ESTADO.empresas, cidade, ESTADO.raioKm);
 
   } catch (e) {
@@ -304,18 +321,37 @@ function renderizarEmpresas(empresas, cidade, raio) {
     const rel = Math.round(emp.relevancia || 0);
     const relClass = rel >= 70 ? 'rel-alto' : rel >= 40 ? 'rel-medio' : 'rel-baixo';
     const stars = emp.avaliacao_google ? `⭐ ${Number(emp.avaliacao_google).toFixed(1)}` : '';
-    const phone = emp.telefone ? `<a href="tel:${emp.telefone}" class="emp-link">📞 ${emp.telefone}</a>` : '';
+    const phone = emp.telefone ? `<a href="tel:${emp.telefone}" class="emp-link">📞 ${escapeHtml(emp.telefone)}</a>` : '';
     const wpp   = emp.whatsapp  ? `<a href="https://wa.me/${emp.whatsapp.replace(/\D/g,'')}" target="_blank" class="emp-link">💬 WhatsApp</a>` : '';
-    const site  = emp.site      ? `<a href="${emp.site}" target="_blank" class="emp-link">🌐 Site</a>` : '';
-    const email = emp.email     ? `<a href="mailto:${emp.email}" class="emp-link">✉️ ${emp.email}</a>` : '';
+    const site  = emp.site      ? `<a href="${encodeURI(emp.site)}" target="_blank" class="emp-link">🌐 Site</a>` : '';
+    const email = emp.email     ? `<a href="mailto:${escapeAttr(emp.email)}" class="emp-link">✉️ ${escapeHtml(emp.email)}</a>` : '';
+
+    // Selo da fonte
+    const fonteBadge = emp.fonte === 'receita'
+      ? '<span class="emp-fonte emp-fonte-receita">🏛️ Receita</span>'
+      : emp.fonte === 'google'
+        ? '<span class="emp-fonte emp-fonte-google">🗺️ Google</span>'
+        : '';
+
+    // Linha de identificação (CNPJ + CNAE), relevante para dados da Receita
+    const cnpjLinha = emp.cnpj
+      ? `<div class="empresa-cnpj">🧾 CNPJ: ${escapeHtml(emp.cnpj)}${emp.situacao ? ` · <span class="emp-situacao">${escapeHtml(emp.situacao)}</span>` : ''}</div>`
+      : '';
+    const cnaeLinha = emp.cnae_principal
+      ? `<div class="empresa-cnae">🏷️ CNAE ${escapeHtml(emp.cnae_principal)}${emp.cnae_descricao ? ` — ${escapeHtml(emp.cnae_descricao)}` : ''}</div>`
+      : '';
+
+    const nomeExib = emp.nome || emp.razao_social || 'Empresa';
 
     return `
       <div class="empresa-card">
         <div class="empresa-header">
-          <div class="empresa-nome">${escapeHtml(emp.nome || 'Empresa')}</div>
+          <div class="empresa-nome">${escapeHtml(nomeExib)} ${fonteBadge}</div>
           <div class="empresa-rel ${relClass}">${rel}%</div>
         </div>
         <div class="empresa-endereco">📍 ${escapeHtml(emp.endereco || '—')}</div>
+        ${cnpjLinha}
+        ${cnaeLinha}
         ${stars ? `<div class="empresa-avaliacao">${stars} (${emp.total_avaliacoes || 0} avaliações)</div>` : ''}
         <div class="empresa-contatos">
           ${phone}${wpp}${site}${email}

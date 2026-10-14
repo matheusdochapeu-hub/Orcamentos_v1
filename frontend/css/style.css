@@ -525,3 +525,29 @@ textarea { resize: vertical; min-height: 80px; }
 .flex  { display: flex; }
 .gap-8 { gap: 8px; }
 .w-full { width: 100%; }
+
+/* ── Selo de fonte da empresa (Receita / Google) ── */
+.emp-fonte {
+  display: inline-block;
+  font-size: .68rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  vertical-align: middle;
+  margin-left: 6px;
+}
+.emp-fonte-receita { background: #e3f0ff; color: #1a3a5c; }
+.emp-fonte-google  { background: #e9f7ef; color: #1e7e4f; }
+
+/* ── Linhas de CNPJ / CNAE / situação ── */
+.empresa-cnpj,
+.empresa-cnae {
+  font-size: .8rem;
+  color: var(--texto-leve, #667);
+  margin-top: 4px;
+  word-break: break-word;
+}
+.emp-situacao {
+  color: #1e7e4f;
+  font-weight: 600;
+}

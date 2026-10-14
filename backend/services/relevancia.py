@@ -48,60 +48,69 @@ def calcular_relevancia(
     """
     Calcula o percentual de relevância (0–100) de uma empresa para o item buscado.
 
-    Critérios:
-    ┌────────────────────────────────────────────────┬───────┐
-    │ Critério                                       │ Peso  │
-    ├────────────────────────────────────────────────┼───────┤
-    │ Palavras-chave no nome da empresa              │  25%  │
-    │ Palavras-chave no site / reviews               │  20%  │
-    │ Tipo Google Places compatível                  │  20%  │
-    │ Avaliação Google (proxy de qualidade)          │  15%  │
-    │ Quantidade de avaliações (proxy de maturidade) │  10%  │
-    │ Similaridade Levenshtein nome × item           │  10%  │
-    └────────────────────────────────────────────────┴───────┘
+    O cálculo se ADAPTA à fonte da empresa:
+      - Empresas do Google têm avaliação, tipos e reviews → esses sinais contam.
+      - Empresas da Receita (sem Maps) usam CNAE compatível e correspondência de
+        nome/atividade. Nesses casos o peso é redistribuído para não penalizar
+        quem simplesmente não tem ficha no Google.
     """
     palavras = _palavras_chave(nome_item)
     if not palavras:
         return 50  # sem informação suficiente, score neutro
 
+    fonte = (empresa.get("fonte") or "").lower()
+    eh_receita = fonte == "receita"
+
     score = 0.0
 
-    # ── 1. Palavras-chave no nome da empresa (peso 25) ─────────────────────
-    nome_emp = _normalizar(empresa.get("nome", ""))
+    # ── 1. Palavras-chave no nome/razão social da empresa ──────────────────
+    nome_emp = _normalizar(
+        f"{empresa.get('nome','')} {empresa.get('razao_social','')}"
+    )
     hits_nome = sum(1 for p in palavras if p in nome_emp)
     score += (hits_nome / len(palavras)) * 25
 
-    # ── 2. Palavras-chave em site + reviews (peso 20) ─────────────────────
+    # ── 2. Palavras-chave em site/reviews/descrição + CNAE ─────────────────
     textos_extra = " ".join([
         empresa.get("site", ""),
         empresa.get("descricao", ""),
+        empresa.get("cnae_descricao", ""),
         " ".join(empresa.get("reviews", [])),
     ])
     texto_extra_norm = _normalizar(textos_extra)
     hits_extra = sum(1 for p in palavras if p in texto_extra_norm)
-    if palavras:
-        score += (hits_extra / len(palavras)) * 20
+    score += (hits_extra / len(palavras)) * 20
 
-    # ── 3. Tipos Google Places compatíveis (peso 20) ──────────────────────
-    tipo_key = "material" if tipo_cat == "CATMAT" else "servico"
-    tipos_esperados = TIPOS_GOOGLE_POR_CATEGORIA.get(tipo_key, [])
-    tipos_empresa = empresa.get("tipos", [])
-    compativel = any(t in tipos_esperados for t in tipos_empresa)
-    score += 20 if compativel else 0
+    if eh_receita:
+        # ── Receita: CNAE compatível + empresa ativa valem no lugar dos
+        #    sinais do Google (tipos/avaliação/reviews). ──────────────────
+        # 3+4. Classificação compatível (peso 35): se houve CNAE casado pelo
+        #      mapa, a própria presença na lista já indica compatibilidade.
+        if empresa.get("cnae_principal"):
+            score += 35
+        # 5. Empresa ATIVA é proxy de maturidade (peso 10)
+        if "ATIVA" in (empresa.get("situacao") or "").upper():
+            score += 10
+    else:
+        # ── 3. Tipos Google Places compatíveis (peso 20) ──────────────────
+        tipo_key = "material" if tipo_cat == "CATMAT" else "servico"
+        tipos_esperados = TIPOS_GOOGLE_POR_CATEGORIA.get(tipo_key, [])
+        tipos_empresa = empresa.get("tipos", [])
+        if any(t in tipos_esperados for t in tipos_empresa):
+            score += 20
 
-    # ── 4. Avaliação Google (peso 15) ─────────────────────────────────────
-    avaliacao = float(empresa.get("avaliacao_google") or empresa.get("avaliacao", 0))
-    # Normaliza: 5.0 → 15, 0 → 0
-    score += (avaliacao / 5.0) * 15
+        # ── 4. Avaliação Google (peso 15) ─────────────────────────────────
+        avaliacao = float(empresa.get("avaliacao_google") or empresa.get("avaliacao", 0) or 0)
+        score += (avaliacao / 5.0) * 15
 
-    # ── 5. Quantidade de avaliações — proxy de maturidade (peso 10) ────────
-    qtd_aval = int(empresa.get("total_avaliacoes", 0))
-    if qtd_aval >= 100:
-        score += 10
-    elif qtd_aval >= 20:
-        score += 6
-    elif qtd_aval >= 5:
-        score += 3
+        # ── 5. Quantidade de avaliações — proxy de maturidade (peso 10) ────
+        qtd_aval = int(empresa.get("total_avaliacoes", 0) or 0)
+        if qtd_aval >= 100:
+            score += 10
+        elif qtd_aval >= 20:
+            score += 6
+        elif qtd_aval >= 5:
+            score += 3
 
     # ── 6. Similaridade Levenshtein nome empresa × nome item (peso 10) ─────
     lev = lev_ratio(nome_emp[:40], _normalizar(nome_item)[:40])
