@@ -183,6 +183,50 @@ def _normalizar_item(item: dict, municipio_fallback="", uf_fallback="") -> dict:
     return emp
 
 
+async def consultar_cnpj(cnpj: str, client: "httpx.AsyncClient | None" = None) -> dict | None:
+    """
+    Consulta UM CNPJ no MinhaReceita (GET /{cnpj}) e devolve no schema canônico.
+    Esta é a parte 100% documentada/estável da API. Usada para ENRIQUECER
+    endereço/telefone de CNPJs achados no PNCP. Retorna None se não encontrar.
+    """
+    digits = "".join(ch for ch in str(cnpj or "") if ch.isdigit())
+    if len(digits) != 14:
+        return None
+
+    cache_key = "cnpj_" + hashlib.md5(digits.encode()).hexdigest()
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached[0] if cached else None
+
+    async def _do(c):
+        r = await c.get(f"{MINHARECEITA_URL}/{digits}")
+        if r.status_code != 200:
+            return None
+        try:
+            data = r.json()
+        except Exception:
+            return None
+        if not isinstance(data, dict):
+            return None
+        return _normalizar_item(data)
+
+    try:
+        if client is not None:
+            emp = await _do(client)
+        else:
+            async with httpx.AsyncClient(
+                timeout=TIMEOUT,
+                headers={"User-Agent": "OrcamentosPublicos/2.0", "Accept": "application/json"},
+            ) as c:
+                emp = await _do(c)
+    except Exception as e:
+        print(f"[Receita CNPJ {digits}] {e}")
+        return None
+
+    _cache_set(cache_key, [emp] if emp else [], horas=72)
+    return emp
+
+
 def _extrair_lista(data) -> list[dict]:
     """Extrai a lista de empresas de respostas em formatos variados."""
     if isinstance(data, list):

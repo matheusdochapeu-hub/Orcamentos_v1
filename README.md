@@ -51,8 +51,15 @@ nada. As fontes são:
 
 | Fonte | O que faz | Precisa de chave? |
 |-------|-----------|-------------------|
-| 🏛️ **Receita Federal** (sempre usada) | Lista empresas **ativas** da base CNPJ filtrando por **CNAE (atividade) + município + UF**. Inclui fabricantes, distribuidoras e atacadistas que não têm ficha no Google. | **Não** |
+| ✅ **PNCP** (alta precisão) | Encontra empresas que **já forneceram este tipo de item ao poder público** (histórico de contratações). Comprovadamente vendem o produto → vão para o **topo** da lista com o selo "já forneceu". | **Não** |
+| 🏛️ **Receita Federal** (cobertura) | Lista empresas **ativas** da base CNPJ filtrando por **CNAE (atividade) + município + UF**. Completa a lista quando o histórico é escasso. | **Não** |
 | 🗺️ **Google Maps** (usada se houver chave) | Enriquece os resultados com estabelecimentos do Google (avaliação, telefone). | Sim (opcional) |
+
+> **Por que a busca ficou mais precisa:** o CNAE diz só a *atividade declarada*
+> da empresa (genérico). O **PNCP** mostra quem **realmente já vendeu** aquele
+> item em compras públicas — evidência concreta de que fornece o produto. Essas
+> empresas recebem um piso alto de relevância e o selo ✓. A Receita entra como
+> complemento de cobertura. Há um filtro **"Só quem já forneceu"** nos resultados.
 
 > A seleção de fonte **não aparece na tela**. Se uma chave do Google estiver
 > configurada, ela entra automaticamente na busca; caso contrário, o sistema

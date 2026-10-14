@@ -353,6 +353,10 @@ function montarBarraFiltros() {
       <input type="checkbox" id="f-tel" ${soTel?'checked':''} onchange="aplicarFiltros()">
       Só com telefone
     </label>
+    <label class="filtro-check">
+      <input type="checkbox" id="f-forneceu" ${ESTADO.filtros?.soForneceu?'checked':''} onchange="aplicarFiltros()">
+      Só quem já forneceu
+    </label>
     <div class="filtro-contagem" id="filtro-contagem"></div>
   `;
 }
@@ -362,6 +366,7 @@ function aplicarFiltros() {
     ordem:      document.getElementById('f-ordem')?.value || 'relevancia',
     chanceMin:  parseInt(document.getElementById('f-chance')?.value || '0', 10),
     soTelefone: document.getElementById('f-tel')?.checked || false,
+    soForneceu: document.getElementById('f-forneceu')?.checked || false,
   };
   renderGridEmpresas();
 }
@@ -373,6 +378,7 @@ function renderGridEmpresas() {
 
   let lista = base.filter(emp => {
     if (f.soTelefone && !(emp.telefone && emp.telefone.trim())) return false;
+    if (f.soForneceu && !emp.ja_forneceu) return false;
     if (f.chanceMin && Math.round(emp.relevancia || 0) < f.chanceMin) return false;
     return true;
   });
@@ -431,6 +437,9 @@ function cardEmpresa(emp) {
 
   const distBadge = (emp.distancia_km !== null && emp.distancia_km !== undefined)
     ? `<span class="emp-dist">📏 ${Number(emp.distancia_km).toFixed(1)} km</span>` : '';
+  const fornecBadge = emp.ja_forneceu
+    ? `<span class="emp-forneceu" title="Já forneceu este tipo de item ao poder público">✓ já forneceu ao poder público</span>`
+    : '';
 
   const cnpjLinha = emp.cnpj
     ? `<div class="empresa-cnpj">🧾 CNPJ: ${escapeHtml(emp.cnpj)}${emp.situacao ? ` · <span class="emp-situacao">${escapeHtml(emp.situacao)}</span>` : ''}</div>` : '';
@@ -444,6 +453,7 @@ function cardEmpresa(emp) {
       <div class="empresa-header">
         <div>
           <div class="empresa-nome">${escapeHtml(nome)} ${distBadge}</div>
+          ${fornecBadge}
           ${subRazao}
         </div>
         <div class="empresa-rel ${relClass}" title="Chance de ter o produto: ${relRotulo}">${rel}%</div>

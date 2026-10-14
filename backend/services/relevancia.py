@@ -120,6 +120,11 @@ def calcular_relevancia(
     if tipo_busca == "exata" and hits_nome == len(palavras):
         score = min(score + 10, 100)
 
+    # ── ALTA CONFIANÇA: já forneceu este tipo de item ao poder público ─────
+    # Evidência concreta de que fornece o produto → piso alto de relevância.
+    if empresa.get("ja_forneceu"):
+        score = max(score, 85)
+
     return min(int(round(score)), 100)
 
 

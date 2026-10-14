@@ -38,6 +38,7 @@ def empresa_vazia() -> dict:
         "cnae_descricao": "",
         "tipos": [],              # tipos Google Places (quando aplicável)
         "situacao": "",           # ATIVA / etc. (Receita)
+        "ja_forneceu": False,     # True se já forneceu o item ao poder público (PNCP)
         # Qualidade / reputação (quando houver)
         "avaliacao_google": 0,
         "total_avaliacoes": 0,
