@@ -9,7 +9,7 @@ const ESTADO = {
   modoBusca: 'nome',     // 'nome' | 'descricao'
   itemSelecionado: null, // { codigo, descricao, tipo }
   tipoBusca: 'exata',
-  fonte: 'receita',      // 'receita' | 'google' | 'ambas'
+  fonte: 'ambas',        // busca em todas as fontes possíveis (não exposto na tela)
   raioKm: 10,
   empresas: [],
   buscaId: null,
@@ -203,12 +203,7 @@ function selecionarTipoBusca(tipo) {
   document.getElementById('card-similar').classList.toggle('selecionado', tipo === 'similaridade');
 }
 
-function selecionarFonte(fonte) {
-  ESTADO.fonte = fonte;
-  document.getElementById('fonte-receita').classList.toggle('selecionado', fonte === 'receita');
-  document.getElementById('fonte-google').classList.toggle('selecionado', fonte === 'google');
-  document.getElementById('fonte-ambas').classList.toggle('selecionado', fonte === 'ambas');
-}
+
 
 // ═══════════════════ ETAPA 4 — Busca de empresas ═════════════
 
@@ -218,19 +213,10 @@ async function buscarEmpresas() {
 
   if (!cidade) { toast('Informe a cidade', 'warn'); return; }
 
+  // Busca em TODAS as fontes disponíveis automaticamente. A chave do Google é
+  // opcional: se existir, entra na busca; se não, o backend usa só o que puder.
   const mapsKey = localStorage.getItem('maps_key') || '';
-  const fonte   = ESTADO.fonte || 'receita';
-
-  // A chave do Google só é obrigatória para fontes que usam o Google Maps.
-  if ((fonte === 'google' || fonte === 'ambas') && !mapsKey) {
-    if (fonte === 'google') {
-      toast('⚙️ A fonte "Google Maps" exige a chave. Configure-a ou use a fonte "Receita Federal".', 'warn');
-      abrirModalConfig();
-      return;
-    }
-    // fonte 'ambas' sem chave → segue só com a Receita (backend avisa)
-    toast('ℹ️ Sem chave do Google — buscando apenas na base da Receita Federal.', 'info');
-  }
+  const fonte   = 'ambas';
 
   irParaEtapa(4);
   mostrarLoading('loading-emp', true);
@@ -277,7 +263,11 @@ async function buscarEmpresas() {
     ESTADO.empresas     = data.empresas || [];
     ESTADO.fontesUsadas = data.fontes_usadas || [];
     ESTADO.dadosBusca   = { cidade, estado, raio: ESTADO.raioKm, tipo_busca: ESTADO.tipoBusca, fonte };
-    (data.avisos || []).forEach(a => toast(a, 'info'));
+    // Avisos internos sobre fontes (ex.: Google não configurado) não interessam
+    // ao usuário, já que a escolha de fonte não é mais exposta na tela.
+    (data.avisos || [])
+      .filter(a => !/google|fonte/i.test(a))
+      .forEach(a => toast(a, 'info'));
     renderizarEmpresas(ESTADO.empresas, cidade, ESTADO.raioKm);
 
   } catch (e) {
@@ -326,13 +316,6 @@ function renderizarEmpresas(empresas, cidade, raio) {
     const site  = emp.site      ? `<a href="${encodeURI(emp.site)}" target="_blank" class="emp-link">🌐 Site</a>` : '';
     const email = emp.email     ? `<a href="mailto:${escapeAttr(emp.email)}" class="emp-link">✉️ ${escapeHtml(emp.email)}</a>` : '';
 
-    // Selo da fonte
-    const fonteBadge = emp.fonte === 'receita'
-      ? '<span class="emp-fonte emp-fonte-receita">🏛️ Receita</span>'
-      : emp.fonte === 'google'
-        ? '<span class="emp-fonte emp-fonte-google">🗺️ Google</span>'
-        : '';
-
     // Linha de identificação (CNPJ + CNAE), relevante para dados da Receita
     const cnpjLinha = emp.cnpj
       ? `<div class="empresa-cnpj">🧾 CNPJ: ${escapeHtml(emp.cnpj)}${emp.situacao ? ` · <span class="emp-situacao">${escapeHtml(emp.situacao)}</span>` : ''}</div>`
@@ -349,7 +332,7 @@ function renderizarEmpresas(empresas, cidade, raio) {
     return `
       <div class="empresa-card">
         <div class="empresa-header">
-          <div class="empresa-nome">${escapeHtml(nomeExib)} ${fonteBadge}${distBadge}</div>
+          <div class="empresa-nome">${escapeHtml(nomeExib)} ${distBadge}</div>
           <div class="empresa-rel ${relClass}">${rel}%</div>
         </div>
         <div class="empresa-endereco">📍 ${escapeHtml(emp.endereco || '—')}</div>
