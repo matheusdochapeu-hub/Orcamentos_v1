@@ -402,10 +402,41 @@ textarea { resize: vertical; min-height: 80px; }
   gap: 12px;
   margin-bottom: 8px;
 }
-.empresa-nome { font-weight: 800; font-size: 1rem; color: var(--texto); line-height: 1.3; }
-.empresa-endereco { font-size: .85rem; color: var(--texto-leve); margin-top: 2px; }
+.empresa-nome { font-weight: 800; font-size: 1.02rem; color: var(--texto); line-height: 1.3; }
+.empresa-razao { font-size: .78rem; color: var(--texto-leve); margin-top: 2px; }
+.empresa-endereco { font-size: .85rem; color: var(--texto-leve); margin-top: 8px; }
 
 .empresa-avaliacao { font-size: .82rem; color: #b45309; font-weight: 600; margin-top: 6px; }
+
+/* ── Telefone em evidência ── */
+.empresa-telefone {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #16A34A, #15803d);
+  color: #fff;
+  border-radius: 12px;
+  text-decoration: none;
+  font-weight: 800;
+  box-shadow: 0 3px 10px rgba(22,163,74,.25);
+  transition: var(--transicao);
+}
+.empresa-telefone:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(22,163,74,.35); }
+.empresa-telefone .tel-icone { font-size: 1.1rem; }
+.empresa-telefone .tel-numero { font-size: 1.08rem; letter-spacing: .3px; }
+.empresa-telefone .tel-acao {
+  margin-left: 4px; font-size: .72rem; font-weight: 700;
+  background: rgba(255,255,255,.22); padding: 3px 10px; border-radius: 999px;
+}
+.empresa-telefone.sem-telefone {
+  background: #f1f5f9; color: var(--texto-leve);
+  box-shadow: none; font-weight: 600; font-size: .85rem; cursor: default;
+}
+.empresa-telefone.sem-telefone:hover { transform: none; box-shadow: none; }
+
+.emp-link-secundario { opacity: .85; }
 
 .empresa-contatos {
   display: flex; flex-wrap: wrap; gap: 8px;
@@ -624,4 +655,44 @@ textarea { resize: vertical; min-height: 80px; }
 .emp-situacao {
   color: #1e7e4f;
   font-weight: 600;
+}
+
+/* ── Barra de filtros/ordenação dos resultados ── */
+.filtros-empresas {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: #fff;
+  border: 1px solid var(--cinza-borda);
+  border-radius: var(--radius);
+  box-shadow: var(--sombra);
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+.filtros-empresas .filtro-item { display: flex; flex-direction: column; gap: 4px; }
+.filtros-empresas label {
+  font-size: .72rem; font-weight: 700; color: var(--texto-leve);
+  text-transform: uppercase; letter-spacing: .03em; margin: 0;
+}
+.filtros-empresas select {
+  padding: 8px 12px; font-size: .85rem; border: 2px solid var(--cinza-borda);
+  border-radius: var(--radius-sm); background: #fff; cursor: pointer; min-width: 180px;
+}
+.filtros-empresas select:focus { border-color: var(--azul-medio); outline: none; }
+.filtro-check {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: .85rem; font-weight: 600; color: var(--texto);
+  cursor: pointer; padding-bottom: 8px; text-transform: none; letter-spacing: 0;
+}
+.filtro-check input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--azul-medio); }
+.filtro-contagem {
+  margin-left: auto; padding-bottom: 8px;
+  font-size: .82rem; font-weight: 700; color: var(--azul-medio);
+}
+
+@media (max-width: 640px) {
+  .filtros-empresas { flex-direction: column; align-items: stretch; }
+  .filtros-empresas select { min-width: 0; width: 100%; }
+  .filtro-contagem { margin-left: 0; }
 }

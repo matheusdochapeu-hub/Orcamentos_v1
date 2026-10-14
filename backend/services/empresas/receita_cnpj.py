@@ -146,8 +146,9 @@ def _normalizar_item(item: dict, municipio_fallback="", uf_fallback="") -> dict:
     emp["id"] = cnpj or _primeiro(item, "id", default="")
 
     emp["razao_social"] = _primeiro(item, "razao_social", "razaoSocial", "nome", "company", default="")
-    emp["nome"] = _primeiro(item, "nome_fantasia", "nomeFantasia", "fantasia",
-                            "trade_name", default="") or emp["razao_social"]
+    emp["nome_fantasia"] = _primeiro(item, "nome_fantasia", "nomeFantasia", "fantasia",
+                                     "trade_name", default="")
+    emp["nome"] = emp["nome_fantasia"] or emp["razao_social"]
 
     emp["municipio"] = _primeiro(item, "municipio", "cidade", "city", default="") or municipio_fallback
     emp["uf"] = _primeiro(item, "uf", "estado", "state", default="") or uf_fallback
