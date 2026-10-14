@@ -39,6 +39,12 @@ import httpx
 from services.empresas.base import ProvedorEmpresas, empresa_vazia
 from services.cnae_map import mapear_cnaes, formatar_cnae
 from services import geocode
+from services import ibge
+
+
+def _cnae_numerico(cnae: str) -> str:
+    """'4754-7/01' ou '4754701' → '4754701' (só dígitos, como o MinhaReceita espera)."""
+    return "".join(ch for ch in str(cnae) if ch.isdigit())
 
 TIMEOUT = 30.0
 CACHE_DB = Path(__file__).resolve().parent.parent.parent / "database" / "catmat_cache.db"
@@ -196,47 +202,64 @@ def _extrair_lista(data) -> list[dict]:
 
 # ─── Busca no MinhaReceita ─────────────────────────────────────────────────────
 
-async def _buscar_minhareceita(client, cnaes, uf, municipio, pagina=1) -> tuple[list[dict], str]:
+async def _buscar_minhareceita(client, cnaes, uf, cod_municipio, cursor=None,
+                               limit=50) -> tuple[list[dict], str, str]:
     """
-    Faz a busca filtrada. Como o formato exato de parâmetros pode variar entre
-    versões/instâncias, tentamos algumas combinações de nome de parâmetro no
-    endpoint /search. Retorna (lista, detalhe_do_erro).
+    Busca no MinhaReceita conforme o contrato real da API (código-fonte do
+    projeto cuducos/minha-receita):
+
+      GET {URL}/?uf=SP&municipio={códigoIBGE}&cnae_fiscal={num}&limit=N&cursor=...
+
+    - A busca é na raiz "/" (não "/search").
+    - 'municipio' é o CÓDIGO IBGE numérico (não o nome).
+    - 'cnae_fiscal' é o CNAE principal numérico; repetimos o parâmetro p/ cada CNAE.
+    - Resposta: {"data": [...], "cursor": "<prox>" | null}.
+
+    Retorna (lista, proximo_cursor, detalhe_do_erro).
     """
-    endpoint = f"{MINHARECEITA_URL}/search"
-    # Conjuntos de parâmetros candidatos (ordem = mais provável primeiro)
-    tentativas = [
-        {"cnae_fiscal": ",".join(cnaes[:5]), "uf": uf, "municipio": municipio, "page": pagina},
-        {"cnae": ",".join(cnaes[:5]), "uf": uf, "municipio": municipio, "page": pagina},
-        {"cnae_fiscal_principal": ",".join(cnaes[:5]), "uf": uf, "municipio": municipio},
-    ]
-    ultimo_erro = ""
-    for params in tentativas:
-        params = {k: v for k, v in params.items() if v not in (None, "", [])}
-        try:
-            r = await client.get(endpoint, params=params)
-        except Exception as e:
-            ultimo_erro = f"falha de rede ao acessar {endpoint}: {e}"
-            continue
-        if r.status_code == 404:
-            ultimo_erro = f"endpoint {endpoint} não encontrado (HTTP 404) — confira RECEITA_CUSTOM_URL"
-            continue
-        if r.status_code == 429:
-            ultimo_erro = "limite de requisições atingido na fonte (HTTP 429) — tente novamente em instantes"
-            continue
-        if r.status_code != 200:
-            ultimo_erro = f"a fonte respondeu HTTP {r.status_code}"
-            continue
-        try:
-            data = r.json()
-        except Exception:
-            ultimo_erro = "a fonte respondeu em formato não-JSON"
-            continue
-        lista = _extrair_lista(data)
-        if lista:
-            return lista, ""
-        # 200 mas sem itens com este conjunto de parâmetros → tenta o próximo
-        ultimo_erro = "a fonte respondeu, mas sem empresas para este filtro"
-    return [], ultimo_erro
+    endpoint = f"{MINHARECEITA_URL}/"
+    # httpx aceita lista em um parâmetro → vira ?cnae_fiscal=A&cnae_fiscal=B
+    params: dict = {}
+    cnaes_num = [c for c in (_cnae_numerico(x) for x in cnaes) if c]
+    if cnaes_num:
+        params["cnae_fiscal"] = cnaes_num
+    if uf:
+        params["uf"] = uf
+    if cod_municipio:
+        params["municipio"] = str(cod_municipio)
+    params["limit"] = str(limit)
+    if cursor:
+        params["cursor"] = cursor
+
+    try:
+        r = await client.get(endpoint, params=params)
+    except Exception as e:
+        return [], "", f"falha de rede ao acessar {endpoint}: {e}"
+
+    if r.status_code == 400:
+        return [], "", ("a fonte recusou os filtros (HTTP 400) — verifique UF/município/CNAE")
+    if r.status_code == 404:
+        return [], "", (f"endpoint {endpoint} não encontrado (HTTP 404) — confira RECEITA_CUSTOM_URL")
+    if r.status_code == 408:
+        return [], "", "a busca excedeu o tempo limite na fonte (HTTP 408) — tente um filtro mais específico"
+    if r.status_code == 429:
+        return [], "", "limite de requisições atingido na fonte (HTTP 429) — tente novamente em instantes"
+    if r.status_code != 200:
+        return [], "", f"a fonte respondeu HTTP {r.status_code}"
+    try:
+        data = r.json()
+    except Exception:
+        return [], "", "a fonte respondeu em formato não-JSON"
+
+    lista = _extrair_lista(data)
+    prox = ""
+    if isinstance(data, dict):
+        c = data.get("cursor")
+        if isinstance(c, str) and c:
+            prox = c
+    if not lista:
+        return [], prox, "a fonte respondeu, mas sem empresas para este filtro"
+    return lista, prox, ""
 
 
 class ProvedorReceita(ProvedorEmpresas):
@@ -264,7 +287,17 @@ class ProvedorReceita(ProvedorEmpresas):
         uf = (estado or "").strip().upper()
         municipio = (cidade or "").strip()
 
-        cache_hit = _cache_get(_chave(cnaes, uf, municipio))
+        # O MinhaReceita filtra município por CÓDIGO IBGE (não pelo nome).
+        cod_municipio = None
+        if municipio:
+            cod_municipio = await ibge.codigo_municipio(municipio, uf)
+            if cod_municipio is None and not uf:
+                # sem UF e sem conseguir resolver → orienta o usuário
+                raise ReceitaIndisponivel(
+                    f"Para buscar em '{municipio}', selecione também o Estado (UF)."
+                )
+
+        cache_hit = _cache_get(_chave(cnaes, uf, str(cod_municipio or municipio)))
         if cache_hit is not None:
             empresas = await self._aplicar_raio(
                 cache_hit, cidade=municipio, uf=uf, raio_km=raio_km,
@@ -279,18 +312,21 @@ class ProvedorReceita(ProvedorEmpresas):
             headers={"User-Agent": "OrcamentosPublicos/2.0", "Accept": "application/json"},
         ) as client:
             brutos: list[dict] = []
-            for pagina in range(1, 3):  # até 2 páginas
-                lote, detalhe_erro = await _buscar_minhareceita(client, cnaes, uf, municipio, pagina)
+            cursor = None
+            for _ in range(3):  # até 3 páginas (cursor)
+                lote, cursor, detalhe_erro = await _buscar_minhareceita(
+                    client, cnaes, uf, cod_municipio, cursor=cursor, limit=max_empresas
+                )
                 if not lote:
                     break
                 brutos.extend(lote)
-                if len(brutos) >= max_empresas:
+                if len(brutos) >= max_empresas or not cursor:
                     break
                 await asyncio.sleep(0.3)
 
             if brutos:
                 empresas = [_normalizar_item(b, municipio, uf) for b in brutos]
-                _cache_set(_chave(cnaes, uf, municipio), empresas)
+                _cache_set(_chave(cnaes, uf, str(cod_municipio or municipio)), empresas)
 
         # Diagnóstico: se não vieram empresas E houve um erro de fonte (não apenas
         # "sem resultados"), avisa o usuário em vez de retornar vazio silencioso.
