@@ -63,9 +63,15 @@ mapeia o item para um conjunto de **CNAEs** compatíveis
 (`backend/services/cnae_map.py`) e usa esses códigos para filtrar a base CNPJ.
 O mapa é facilmente expansível — basta adicionar palavras-chave → CNAEs.
 
-> A fonte Receita consome uma **API pública de dados da Receita Federal**
-> (configurável em `RECEITA_BACKEND` no `.env`: `casadosdados`, `cnpja` ou um
-> endpoint próprio `custom`, com fallback automático entre elas).
+> A fonte Receita usa o **MinhaReceita** (projeto open-source que expõe a base
+> de dados abertos da Receita Federal com busca por **CNAE + município + UF**).
+> Por padrão aponta para a instância pública `minhareceita.org`. Você pode
+> **auto-hospedar** sua própria instância e apontar `RECEITA_CUSTOM_URL` para ela
+> no `.env` — recomendado para uso intenso e sem limites de terceiros.
+>
+> Se a consulta à base falhar (URL errada, instância fora do ar, limite de
+> requisições), o sistema **mostra o motivo na tela** em vez de simplesmente
+> retornar "0 empresas".
 
 ### Raio real em km (também sem Google)
 

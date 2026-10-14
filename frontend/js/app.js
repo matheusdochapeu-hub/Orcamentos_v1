@@ -263,11 +263,11 @@ async function buscarEmpresas() {
     ESTADO.empresas     = data.empresas || [];
     ESTADO.fontesUsadas = data.fontes_usadas || [];
     ESTADO.dadosBusca   = { cidade, estado, raio: ESTADO.raioKm, tipo_busca: ESTADO.tipoBusca, fonte };
-    // Avisos internos sobre fontes (ex.: Google não configurado) não interessam
-    // ao usuário, já que a escolha de fonte não é mais exposta na tela.
+    // Mostra avisos de diagnóstico (ex.: falha ao consultar a Receita), mas
+    // oculta os marcados como [interno] (ex.: Google não configurado).
     (data.avisos || [])
-      .filter(a => !/google|fonte/i.test(a))
-      .forEach(a => toast(a, 'info'));
+      .filter(a => !/^\[interno\]/.test(a))
+      .forEach(a => toast(a, a.includes('⚠️') ? 'warn' : 'info'));
     renderizarEmpresas(ESTADO.empresas, cidade, ESTADO.raioKm);
 
   } catch (e) {

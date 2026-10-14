@@ -1,31 +1,28 @@
 """
-Provedor de empresas baseado na BASE CNPJ DA RECEITA FEDERAL.
+Provedor de empresas baseado na BASE CNPJ DA RECEITA FEDERAL via MinhaReceita.
 
-Esta é a ALTERNATIVA ao Google Maps: encontra empresas fornecedoras reais
-filtrando por CNAE (atividade econômica) + município + UF. Vantagens:
+Esta é a fonte principal de fornecedores (alternativa ao Google Maps): encontra
+empresas reais filtrando por CNAE (atividade econômica) + município + UF.
 
-  * Gratuito e público (dados abertos da Receita Federal).
-  * Cobre TODAS as empresas formais do Brasil — inclusive fabricantes,
-    distribuidoras e atacadistas que NÃO têm ficha no Google Maps.
-  * É a fonte correta para embasar compra pública (CNPJ ativo, CNAE compatível).
+Por que MinhaReceita (projeto open-source minhareceita.org):
+  * Expõe a base de dados abertos da Receita Federal com busca FILTRADA por
+    CNAE + UF + município — exatamente o que precisamos.
+  * Pode ser AUTO-HOSPEDADO (self-host) — basta subir a instância e apontar
+    RECEITA_CUSTOM_URL para ela. Enquanto isso, usa a instância pública.
+  * Gratuito, sem chave.
 
-Como obtemos os dados:
-  Consultar a base bruta da Receita exige baixar dezenas de GB. Em vez disso,
-  usamos APIs públicas que já indexam essa base e permitem FILTRAR por
-  CNAE + UF + município. O provedor tenta uma lista de backends em ordem e usa
-  o primeiro que responder. Todos são configuráveis por variável de ambiente,
-  então trocar de fonte não exige mudar código.
+Configuração (.env):
+  RECEITA_BACKEND=minhareceita            # padrão
+  RECEITA_CUSTOM_URL=https://minhareceita.org   # troque para seu self-host
 
-Backends suportados (ver RECEITA_BACKEND no .env):
-  - "casadosdados" : POST público de busca por filtros (CNAE/UF/município).
-  - "cnpja"        : API aberta da CNPJá (cnpja.com) — busca por filtros.
-  - "custom"       : endpoint próprio compatível (self-host do minhareceita, etc.)
+DIAGNÓSTICO: ao contrário da versão anterior (que engolia erros e devolvia lista
+vazia), aqui qualquer falha da fonte vira uma EXCEÇÃO com mensagem clara, que o
+backend repassa ao frontend. Assim, "0 empresas" por erro de configuração/rede
+fica distinguível de "0 empresas" por não haver fornecedores na região.
 
-Nenhuma chave é obrigatória para os backends públicos. Rate limits se aplicam
-(ex.: CNPJá open ~5 req/min por IP), por isso há cache local e paginação enxuta.
-
-IMPORTANTE: respostas de APIs externas variam de formato. Por isso a
-normalização (`_normalizar_item`) é defensiva e cobre as chaves mais comuns.
+IMPORTANTE: formatos de resposta variam entre versões/instâncias. A
+normalização (`_normalizar_item`) e a extração de lista (`_extrair_lista`) são
+defensivas e cobrem as chaves mais comuns.
 """
 from __future__ import annotations
 
@@ -43,16 +40,20 @@ from services.empresas.base import ProvedorEmpresas, empresa_vazia
 from services.cnae_map import mapear_cnaes, formatar_cnae
 from services import geocode
 
-TIMEOUT = 25.0
+TIMEOUT = 30.0
 CACHE_DB = Path(__file__).resolve().parent.parent.parent / "database" / "catmat_cache.db"
 
-# Endpoints padrão (podem ser sobrescritos por .env)
-CASADOSDADOS_URL = os.getenv(
-    "RECEITA_CASADOSDADOS_URL",
-    "https://api.casadosdados.com.br/v2/public/cnpj/search",
-)
-CNPJA_URL = os.getenv("RECEITA_CNPJA_URL", "https://api.cnpja.com/office")
-CUSTOM_URL = os.getenv("RECEITA_CUSTOM_URL", "")
+# URL base da instância MinhaReceita (pública por padrão; troque p/ self-host).
+# Aceita tanto RECEITA_CUSTOM_URL (nome genérico) quanto RECEITA_MINHARECEITA_URL.
+MINHARECEITA_URL = (
+    os.getenv("RECEITA_MINHARECEITA_URL")
+    or os.getenv("RECEITA_CUSTOM_URL")
+    or "https://minhareceita.org"
+).rstrip("/")
+
+
+class ReceitaIndisponivel(Exception):
+    """Erro de configuração/rede/formato da fonte Receita (para exibir ao usuário)."""
 
 
 # ─── Cache de resultados (reaproveita o SQLite já existente) ───────────────────
@@ -104,9 +105,9 @@ def _cache_set(chave: str, dados: list[dict], horas: int = 24):
         pass
 
 
-def _chave(backend: str, cnaes: list[str], uf: str, municipio: str) -> str:
+def _chave(cnaes: list[str], uf: str, municipio: str) -> str:
     raw = json.dumps(
-        {"b": backend, "c": sorted(cnaes), "uf": uf, "m": municipio},
+        {"src": "minhareceita", "c": sorted(cnaes), "uf": uf, "m": municipio},
         sort_keys=True,
     )
     return "emp_" + hashlib.md5(raw.encode()).hexdigest()
@@ -123,7 +124,13 @@ def _primeiro(d: dict, *chaves, default=""):
     return default
 
 
-def _normalizar_item(item: dict) -> dict:
+def _montar_telefone(item: dict) -> str:
+    # MinhaReceita costuma trazer ddd_telefone_1 / ddd_telefone_2
+    tel = _primeiro(item, "telefone", "telefone1", "phone", "ddd_telefone_1", default="")
+    return str(tel).strip()
+
+
+def _normalizar_item(item: dict, municipio_fallback="", uf_fallback="") -> dict:
     """Converte um registro de empresa (formato variado) no schema canônico."""
     emp = empresa_vazia()
     emp["fonte"] = "receita"
@@ -136,103 +143,107 @@ def _normalizar_item(item: dict) -> dict:
     emp["nome"] = _primeiro(item, "nome_fantasia", "nomeFantasia", "fantasia",
                             "trade_name", default="") or emp["razao_social"]
 
-    emp["municipio"] = _primeiro(item, "municipio", "cidade", "city", default="")
-    emp["uf"] = _primeiro(item, "uf", "estado", "state", default="")
+    emp["municipio"] = _primeiro(item, "municipio", "cidade", "city", default="") or municipio_fallback
+    emp["uf"] = _primeiro(item, "uf", "estado", "state", default="") or uf_fallback
     emp["cep"] = _primeiro(item, "cep", "zip", default="")
 
-    # Monta endereço a partir de partes quando não vier pronto
     endereco = _primeiro(item, "endereco", "logradouro_completo", "address", default="")
     if not endereco:
         partes = [
+            _primeiro(item, "descricao_tipo_de_logradouro", "tipo_logradouro", default=""),
             _primeiro(item, "logradouro", "street", default=""),
             str(_primeiro(item, "numero", "number", default="")),
             _primeiro(item, "bairro", "district", default=""),
         ]
-        endereco = ", ".join(p for p in partes if p)
+        endereco = " ".join(str(p) for p in partes if p).strip()
     cidade_uf = ", ".join(p for p in [emp["municipio"], emp["uf"]] if p)
     emp["endereco"] = ", ".join(p for p in [endereco, cidade_uf] if p)
 
-    emp["telefone"] = _primeiro(item, "telefone", "telefone1", "phone", "ddd_telefone_1", default="")
+    emp["telefone"] = _montar_telefone(item)
     emp["email"] = _primeiro(item, "email", "correio_eletronico", default="")
-    emp["situacao"] = str(_primeiro(item, "situacao_cadastral", "situacao", "status", default="")).upper()
+    emp["situacao"] = str(_primeiro(item, "descricao_situacao_cadastral",
+                                    "situacao_cadastral", "situacao", "status",
+                                    default="")).upper()
 
-    cnae = str(_primeiro(item, "cnae_fiscal", "cnae_principal", "cnae", "primary_activity_code", default=""))
+    cnae = str(_primeiro(item, "cnae_fiscal", "cnae_fiscal_principal", "cnae_principal",
+                         "cnae", "primary_activity_code", default=""))
     emp["cnae_principal"] = formatar_cnae(cnae)
     emp["cnae_descricao"] = _primeiro(item, "cnae_fiscal_descricao", "cnae_descricao",
                                       "primary_activity", default="")
 
-    # coordenadas raramente vêm da Receita; ficam None (distância fica indisponível)
     emp["lat"] = _primeiro(item, "lat", "latitude", default=None) or None
     emp["lng"] = _primeiro(item, "lng", "longitude", default=None) or None
-
     return emp
 
 
-# ─── Backends ──────────────────────────────────────────────────────────────────
-
-async def _buscar_casadosdados(client, cnaes, uf, municipio, pagina=1) -> list[dict]:
-    payload = {
-        "query": {
-            "atividade_principal": cnaes,
-            "uf": [uf] if uf else [],
-            "municipio": [municipio.upper()] if municipio else [],
-            "situacao_cadastral": "ATIVA",
-        },
-        "extras": {"somente_mei": False, "excluir_mei": False},
-        "page": pagina,
-    }
-    r = await client.post(CASADOSDADOS_URL, json=payload)
-    if r.status_code != 200:
-        return []
-    data = r.json()
-    # formatos possíveis: {"data": {"cnpj": [...]}} ou {"cnpj": [...]} ou lista
-    cont = data.get("data", data) if isinstance(data, dict) else {}
-    itens = (cont.get("cnpj") or cont.get("empresas") or cont.get("results") or [])
-    return itens if isinstance(itens, list) else []
-
-
-async def _buscar_cnpja(client, cnaes, uf, municipio, pagina=1) -> list[dict]:
-    params = {
-        "state": uf or "",
-        "city": municipio or "",
-        "activity": ",".join(cnaes[:5]),
-        "status": "ACTIVE",
-        "limit": 20,
-        "page": pagina,
-    }
-    r = await client.get(CNPJA_URL, params={k: v for k, v in params.items() if v})
-    if r.status_code != 200:
-        return []
-    data = r.json()
-    itens = data.get("records") or data.get("data") or data.get("offices") or []
-    return itens if isinstance(itens, list) else []
-
-
-async def _buscar_custom(client, cnaes, uf, municipio, pagina=1) -> list[dict]:
-    if not CUSTOM_URL:
-        return []
-    params = {"cnae": ",".join(cnaes), "uf": uf, "municipio": municipio, "page": pagina}
-    r = await client.get(CUSTOM_URL, params=params)
-    if r.status_code != 200:
-        return []
-    data = r.json()
+def _extrair_lista(data) -> list[dict]:
+    """Extrai a lista de empresas de respostas em formatos variados."""
     if isinstance(data, list):
-        return data
-    return data.get("data") or data.get("empresas") or data.get("results") or []
+        return [x for x in data if isinstance(x, dict)]
+    if isinstance(data, dict):
+        for chave in ("data", "results", "empresas", "cnpj", "items", "records", "estabelecimentos"):
+            v = data.get(chave)
+            if isinstance(v, list):
+                return [x for x in v if isinstance(x, dict)]
+            if isinstance(v, dict):
+                # às vezes vem {"data": {"cnpj": [...]}}
+                for chave2 in ("cnpj", "results", "empresas", "items"):
+                    vv = v.get(chave2)
+                    if isinstance(vv, list):
+                        return [x for x in vv if isinstance(x, dict)]
+    return []
 
 
-_BACKENDS = {
-    "casadosdados": _buscar_casadosdados,
-    "cnpja": _buscar_cnpja,
-    "custom": _buscar_custom,
-}
+# ─── Busca no MinhaReceita ─────────────────────────────────────────────────────
+
+async def _buscar_minhareceita(client, cnaes, uf, municipio, pagina=1) -> tuple[list[dict], str]:
+    """
+    Faz a busca filtrada. Como o formato exato de parâmetros pode variar entre
+    versões/instâncias, tentamos algumas combinações de nome de parâmetro no
+    endpoint /search. Retorna (lista, detalhe_do_erro).
+    """
+    endpoint = f"{MINHARECEITA_URL}/search"
+    # Conjuntos de parâmetros candidatos (ordem = mais provável primeiro)
+    tentativas = [
+        {"cnae_fiscal": ",".join(cnaes[:5]), "uf": uf, "municipio": municipio, "page": pagina},
+        {"cnae": ",".join(cnaes[:5]), "uf": uf, "municipio": municipio, "page": pagina},
+        {"cnae_fiscal_principal": ",".join(cnaes[:5]), "uf": uf, "municipio": municipio},
+    ]
+    ultimo_erro = ""
+    for params in tentativas:
+        params = {k: v for k, v in params.items() if v not in (None, "", [])}
+        try:
+            r = await client.get(endpoint, params=params)
+        except Exception as e:
+            ultimo_erro = f"falha de rede ao acessar {endpoint}: {e}"
+            continue
+        if r.status_code == 404:
+            ultimo_erro = f"endpoint {endpoint} não encontrado (HTTP 404) — confira RECEITA_CUSTOM_URL"
+            continue
+        if r.status_code == 429:
+            ultimo_erro = "limite de requisições atingido na fonte (HTTP 429) — tente novamente em instantes"
+            continue
+        if r.status_code != 200:
+            ultimo_erro = f"a fonte respondeu HTTP {r.status_code}"
+            continue
+        try:
+            data = r.json()
+        except Exception:
+            ultimo_erro = "a fonte respondeu em formato não-JSON"
+            continue
+        lista = _extrair_lista(data)
+        if lista:
+            return lista, ""
+        # 200 mas sem itens com este conjunto de parâmetros → tenta o próximo
+        ultimo_erro = "a fonte respondeu, mas sem empresas para este filtro"
+    return [], ultimo_erro
 
 
 class ProvedorReceita(ProvedorEmpresas):
     nome = "receita"
 
     def disponivel(self) -> bool:
-        return True  # backends públicos não exigem chave
+        return bool(MINHARECEITA_URL)
 
     async def buscar(
         self,
@@ -253,54 +264,42 @@ class ProvedorReceita(ProvedorEmpresas):
         uf = (estado or "").strip().upper()
         municipio = (cidade or "").strip()
 
-        # Ordem de backends: .env RECEITA_BACKEND tem prioridade; demais como fallback
-        preferido = os.getenv("RECEITA_BACKEND", "casadosdados").strip().lower()
-        ordem = [preferido] + [b for b in _BACKENDS if b != preferido]
-
-        cache_hit = _cache_get(_chave(preferido, cnaes, uf, municipio))
+        cache_hit = _cache_get(_chave(cnaes, uf, municipio))
         if cache_hit is not None:
-            return cache_hit[:max_empresas]
+            empresas = await self._aplicar_raio(
+                cache_hit, cidade=municipio, uf=uf, raio_km=raio_km,
+                lat_centro=lat, lng_centro=lng,
+            )
+            return empresas[:max_empresas]
 
         empresas: list[dict] = []
+        detalhe_erro = ""
         async with httpx.AsyncClient(
             timeout=TIMEOUT,
             headers={"User-Agent": "OrcamentosPublicos/2.0", "Accept": "application/json"},
         ) as client:
-            for backend in ordem:
-                fn = _BACKENDS.get(backend)
-                if not fn:
-                    continue
-                try:
-                    brutos: list[dict] = []
-                    for pagina in range(1, 3):  # até 2 páginas (enxuto p/ rate limit)
-                        lote = await fn(client, cnaes, uf, municipio, pagina)
-                        if not lote:
-                            break
-                        brutos.extend(lote)
-                        if len(brutos) >= max_empresas:
-                            break
-                        await asyncio.sleep(0.4)
-                    if brutos:
-                        empresas = [_normalizar_item(b) for b in brutos]
-                        _cache_set(_chave(backend, cnaes, uf, municipio), empresas)
-                        break
-                except Exception as e:
-                    print(f"[Receita/{backend}] {e}")
-                    continue
+            brutos: list[dict] = []
+            for pagina in range(1, 3):  # até 2 páginas
+                lote, detalhe_erro = await _buscar_minhareceita(client, cnaes, uf, municipio, pagina)
+                if not lote:
+                    break
+                brutos.extend(lote)
+                if len(brutos) >= max_empresas:
+                    break
+                await asyncio.sleep(0.3)
 
-        # Marca municipio/uf quando a API não devolve (filtro já garante a região)
-        for emp in empresas:
-            if not emp["municipio"]:
-                emp["municipio"] = municipio
-            if not emp["uf"]:
-                emp["uf"] = uf
+            if brutos:
+                empresas = [_normalizar_item(b, municipio, uf) for b in brutos]
+                _cache_set(_chave(cnaes, uf, municipio), empresas)
 
-        # ── RAIO REAL em km (sem Google) ──────────────────────────────────
-        # A base da Receita filtra por município/UF, não por km. Aqui
-        # geocodificamos (via OpenStreetMap, com cache) o centro informado e o
-        # município/endereço de cada empresa, calculamos a distância (Haversine)
-        # e descartamos quem estiver fora do raio. Se a geocodificação do centro
-        # falhar, mantemos o resultado por município (sem filtro fino).
+        # Diagnóstico: se não vieram empresas E houve um erro de fonte (não apenas
+        # "sem resultados"), avisa o usuário em vez de retornar vazio silencioso.
+        if not empresas and detalhe_erro and "sem empresas" not in detalhe_erro:
+            raise ReceitaIndisponivel(
+                f"Não foi possível consultar a base da Receita (MinhaReceita): {detalhe_erro}."
+            )
+
+        # Raio real em km (via OSM/Nominatim)
         empresas = await self._aplicar_raio(
             empresas, cidade=municipio, uf=uf, raio_km=raio_km,
             lat_centro=lat, lng_centro=lng,
@@ -313,24 +312,19 @@ class ProvedorReceita(ProvedorEmpresas):
         if not empresas:
             return empresas
 
-        # 1) centro da busca
         if lat_centro is None or lng_centro is None:
             centro = await geocode.geocodificar(
                 f"{cidade}, {uf}, Brasil" if uf else f"{cidade}, Brasil"
             )
             if not centro:
-                return empresas  # sem centro → não dá p/ medir; devolve como veio
+                return empresas
             lat_centro, lng_centro = centro["lat"], centro["lng"]
 
-        # 2) coordenada de cada empresa (cache por município evita repetir)
-        #    agrupa por município p/ geocodificar uma vez por município.
         por_municipio: dict[str, list[dict]] = {}
         for emp in empresas:
             chave = f"{emp.get('municipio','').strip()}|{(emp.get('uf') or uf).strip()}"
             por_municipio.setdefault(chave, []).append(emp)
 
-        # Salvaguarda: geocodificar muitos municípios é lento (Nominatim ~1 req/s).
-        # Na prática a busca é por 1 município, então isso raramente dispara.
         MAX_MUNICIPIOS_GEO = 12
         if len(por_municipio) > MAX_MUNICIPIOS_GEO:
             for grupo in por_municipio.values():
@@ -341,7 +335,6 @@ class ProvedorReceita(ProvedorEmpresas):
         for chave, grupo in por_municipio.items():
             mun, ufx = (chave.split("|") + [""])[:2]
             if not mun:
-                # sem município → assume no raio (resultado já veio do filtro de UF)
                 for emp in grupo:
                     emp["distancia_km"] = None
                 continue
@@ -361,11 +354,9 @@ class ProvedorReceita(ProvedorEmpresas):
                 emp["lng"] = emp["lng"] or geo["lng"]
                 emp["distancia_km"] = d
 
-        # 3) filtra pelo raio (mantém quem não pôde ser medido)
         dentro = [
             e for e in empresas
             if e.get("distancia_km") is None or e["distancia_km"] <= raio_km
         ]
-        # ordena por distância (medidos primeiro, mais perto antes)
         dentro.sort(key=lambda e: (e.get("distancia_km") is None, e.get("distancia_km") or 0))
         return dentro
