@@ -29,21 +29,56 @@ ETAPA 2 → Sistema busca no catálogo do governo e apresenta
            → Você seleciona o código correto
 
 ETAPA 3 → Informa: Estado + Cidade + Raio de busca (1–200 km)
+           + Fonte dos dados (Receita Federal / Google Maps / Ambas)
            + Tipo de busca (Exata ou Por Similaridade)
 
 ETAPA 4 → Lista de empresas fornecedoras com:
            - % de relevância (0–100%)
+           - CNPJ, CNAE e situação cadastral (fonte Receita)
            - Endereço, telefone, site
-           - Avaliação Google
+           - Avaliação Google (quando a fonte for o Google)
            → Exporta em Excel ou PDF
            → Salva a busca para consulta futura
 ```
 
 ---
 
+## Fontes de busca de empresas
+
+O sistema encontra fornecedores por **duas fontes**, selecionáveis na Etapa 3:
+
+| Fonte | O que faz | Precisa de chave? |
+|-------|-----------|-------------------|
+| 🏛️ **Receita Federal** (padrão) | Lista empresas **ativas** da base CNPJ filtrando por **CNAE (atividade) + município + UF**. Inclui fabricantes, distribuidoras e atacadistas que não têm ficha no Google. | **Não** |
+| 🗺️ **Google Maps** | Estabelecimentos com ficha no Google (loja/vitrine), com avaliação e telefone. | Sim (opcional) |
+| 🔀 **Ambas** | Combina as duas e remove duplicatas (por CNPJ). | Usa o Google se houver chave |
+
+Como o item CATMAT/CATSER escolhido vira uma busca de empresas: o sistema
+mapeia o item para um conjunto de **CNAEs** compatíveis
+(`backend/services/cnae_map.py`) e usa esses códigos para filtrar a base CNPJ.
+O mapa é facilmente expansível — basta adicionar palavras-chave → CNAEs.
+
+> A fonte Receita consome uma **API pública de dados da Receita Federal**
+> (configurável em `RECEITA_BACKEND` no `.env`: `casadosdados`, `cnpja` ou um
+> endpoint próprio `custom`, com fallback automático entre elas).
+
+### Raio real em km (também sem Google)
+
+A base da Receita entrega empresas por **município/UF**. Para respeitar o
+**raio em km**, o sistema geocodifica (via **OpenStreetMap/Nominatim**, grátis e
+sem chave, com cache local) o centro da busca e o município de cada empresa,
+calcula a distância real (Haversine) e descarta quem está fora do raio. Se a
+geocodificação falhar, a busca continua por município (sem o filtro fino),
+em vez de quebrar. A distância aparece em cada card de empresa.
+
+---
+
 ## Configuração das APIs
 
-### Google Maps API Key (obrigatória para busca de empresas)
+### Google Maps API Key (OPCIONAL)
+
+A busca **funciona sem o Google** usando a fonte Receita Federal. A chave só é
+necessária se você escolher a fonte **🗺️ Google Maps** ou **🔀 Ambas**.
 
 1. Acesse [console.cloud.google.com](https://console.cloud.google.com)
 2. Crie um projeto e ative as APIs:
@@ -83,10 +118,17 @@ Orçamentos/
 │   │   ├── buscas.py          ← Salvar/carregar buscas
 │   │   └── export.py          ← Exportar Excel/PDF
 │   └── services/
-│       ├── governo_api.py     ← Integração API ComprasGov
-│       ├── maps_api.py        ← Integração Google Maps/Places
-│       ├── relevancia.py      ← Algoritmo de relevância
-│       └── gemini_api.py      ← Integração Gemini (opcional)
+│       ├── governo_api.py     ← Busca CATMAT/CATSER (online + cache fallback)
+│       ├── cnae_map.py        ← Mapeia item → CNAEs (p/ busca na Receita)
+│       ├── geocode.py         ← Geocodificação OSM/Nominatim + raio real (km)
+│       ├── maps_api.py        ← Integração Google Maps/Places (baixo nível)
+│       ├── relevancia.py      ← Algoritmo de relevância (adapta por fonte)
+│       ├── gemini_api.py      ← Integração Gemini (opcional)
+│       └── empresas/          ← Provedores de busca de empresas
+│           ├── base.py        ← Contrato comum + schema canônico
+│           ├── receita_cnpj.py← Fonte Receita Federal (CNAE+município+UF)
+│           ├── google_maps.py ← Fonte Google Maps (opcional)
+│           └── agregador.py   ← Combina fontes e deduplica
 └── frontend/
     ├── index.html             ← Interface web
     ├── css/style.css          ← Estilos

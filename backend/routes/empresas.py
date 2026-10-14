@@ -1,10 +1,16 @@
 """
 Rotas da API para busca de empresas.
+
+A busca agora é multi-fonte: por padrão usa a BASE CNPJ DA RECEITA FEDERAL
+(CNAE + município + UF), que NÃO depende do Google Maps. O Google é opcional e
+pode ser combinado via o parâmetro `fontes`.
 """
+import os
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
-from services.maps_api import geocodificar_cidade, buscar_todas_empresas
+
+from services.empresas.agregador import buscar_empresas_agregado
 from services.relevancia import classificar_empresas
 
 router = APIRouter(prefix="/api/empresas", tags=["Empresas"])
@@ -24,14 +30,18 @@ class BuscaEmpresasRequest(BaseModel):
     # Tipo de busca
     tipo_busca: str      # "exata" | "similaridade"
 
-    # Google Maps Key do usuário (opcional — se não fornecida, usa .env)
+    # Fonte dos dados: "receita" (padrão) | "google" | "ambas"
+    fontes: Optional[str] = "receita"
+
+    # Chave Google Maps do usuário (só necessária para fontes google/ambas)
     maps_key: Optional[str] = ""
 
 
 @router.post("/buscar")
 async def buscar_empresas(req: BuscaEmpresasRequest):
     """
-    Busca empresas na região informada e retorna lista com percentual de relevância.
+    Busca empresas na região informada e retorna lista com percentual de
+    relevância. Funciona SEM Google Maps (fonte padrão: Receita Federal).
     """
     if req.raio_km < 1 or req.raio_km > 200:
         raise HTTPException(400, "Raio deve estar entre 1 e 200 km")
@@ -39,45 +49,37 @@ async def buscar_empresas(req: BuscaEmpresasRequest):
     if not req.cidade.strip():
         raise HTTPException(400, "Cidade não pode ser vazia")
 
-    # Sobrescreve chave de API se o usuário forneceu a sua
-    import os
+    # Chave Google só é usada quando a fonte envolve o Google
     if req.maps_key and req.maps_key.strip():
         os.environ["GOOGLE_MAPS_API_KEY"] = req.maps_key.strip()
 
-    # 1. Geocodifica a cidade
     try:
-        coords = await geocodificar_cidade(req.cidade.strip(), req.estado or "")
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    except Exception as e:
-        raise HTTPException(502, f"Erro no serviço de geocodificação: {str(e)}")
-
-    # 2. Busca empresas
-    try:
-        empresas = await buscar_todas_empresas(
-            lat=coords["lat"],
-            lng=coords["lng"],
-            raio_km=req.raio_km,
+        resultado = await buscar_empresas_agregado(
             nome_item=req.nome_item,
             codigo_cat=req.codigo_cat,
             tipo_cat=req.tipo_cat,
             tipo_busca=req.tipo_busca,
+            cidade=req.cidade.strip(),
+            estado=(req.estado or "").strip(),
+            raio_km=req.raio_km,
+            fontes=req.fontes or "receita",
+            max_empresas=50,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:
         raise HTTPException(502, f"Erro ao buscar empresas: {str(e)}")
 
-    # 3. Calcula relevância e ordena
     empresas = classificar_empresas(
-        empresas=empresas,
+        empresas=resultado["empresas"],
         nome_item=req.nome_item,
         tipo_cat=req.tipo_cat,
         tipo_busca=req.tipo_busca,
     )
 
     return {
-        "coords": coords,
         "total": len(empresas),
         "empresas": empresas,
+        "fontes_usadas": resultado["fontes_usadas"],
+        "avisos": resultado["avisos"],
     }

@@ -13,14 +13,30 @@ router = APIRouter(prefix="/api/export", tags=["Exportação"])
 
 
 class ExportRequest(BaseModel):
-    nome_busca: str
-    catdescricao: str
-    catcodigo: str
-    tipo: str
-    cidade: str
-    raio_km: int
-    tipo_busca: str
-    empresas: list[dict]
+    # Aceita tanto os nomes antigos quanto os enviados pelo frontend.
+    nome_busca: Optional[str] = ""
+    catdescricao: Optional[str] = ""
+    catcodigo: Optional[str] = ""
+    tipo: Optional[str] = ""
+    cidade: Optional[str] = ""
+    raio_km: Optional[int] = 0
+    tipo_busca: Optional[str] = ""
+    empresas: list[dict] = []
+
+    # Aliases enviados pelo frontend (app.js)
+    titulo: Optional[str] = ""
+    codigo_cat: Optional[str] = ""
+    tipo_cat: Optional[str] = ""
+    fontes_usadas: Optional[list[str]] = None
+
+    def normalizar(self) -> "ExportRequest":
+        """Preenche os campos canônicos a partir dos aliases do frontend."""
+        self.catdescricao = self.catdescricao or self.titulo or ""
+        self.catcodigo = self.catcodigo or self.codigo_cat or ""
+        self.tipo = self.tipo or self.tipo_cat or ""
+        self.tipo_busca = self.tipo_busca or "—"
+        self.nome_busca = self.nome_busca or self.catdescricao
+        return self
 
 
 # ─── EXCEL ────────────────────────────────────────────────────────────────────
@@ -28,6 +44,7 @@ class ExportRequest(BaseModel):
 @router.post("/excel")
 async def exportar_excel(req: ExportRequest):
     """Gera planilha Excel com a lista de empresas."""
+    req = req.normalizar()
     try:
         from openpyxl import Workbook
         from openpyxl.styles import (
@@ -50,7 +67,7 @@ async def exportar_excel(req: ExportRequest):
     cinza       = "F2F2F2"
 
     # ── Cabeçalho da busca ──────────────────────────────────────────────────
-    ws.merge_cells("A1:J1")
+    ws.merge_cells("A1:K1")
     ws["A1"] = "🔍 RELATÓRIO DE BUSCA DE FORNECEDORES"
     ws["A1"].font = Font(bold=True, size=14, color="FFFFFF")
     ws["A1"].fill = PatternFill("solid", fgColor=azul_escuro)
@@ -70,12 +87,12 @@ async def exportar_excel(req: ExportRequest):
         ws[f"A{linha_num}"] = label
         ws[f"A{linha_num}"].font = Font(bold=True)
         ws[f"A{linha_num}"].fill = PatternFill("solid", fgColor=azul_claro)
-        ws.merge_cells(f"D{linha_num}:J{linha_num}")
+        ws.merge_cells(f"D{linha_num}:K{linha_num}")
         ws[f"D{linha_num}"] = valor
 
     # ── Cabeçalho da tabela ─────────────────────────────────────────────────
     linha_header = len(info_linhas) + 3
-    headers = ["#", "Relevância", "Nome", "Endereço", "Telefone", "WhatsApp", "E-mail", "Site", "Avaliação Google", "Categorias"]
+    headers = ["#", "Relevância", "Nome", "CNPJ", "CNAE", "Endereço", "Telefone", "WhatsApp", "E-mail", "Site", "Avaliação Google"]
     for col, h in enumerate(headers, 1):
         cell = ws.cell(row=linha_header, column=col, value=h)
         cell.font = Font(bold=True, color="FFFFFF")
@@ -103,14 +120,15 @@ async def exportar_excel(req: ExportRequest):
         valores = [
             i + 1,
             f"{rel}%",
-            emp.get("nome", ""),
+            emp.get("nome", "") or emp.get("razao_social", ""),
+            emp.get("cnpj", "") or "—",
+            (emp.get("cnae_principal", "") or "—"),
             emp.get("endereco", ""),
             emp.get("telefone", ""),
             emp.get("whatsapp", ""),
             emp.get("email", ""),
             emp.get("site", ""),
             f"{emp.get('avaliacao_google') or emp.get('avaliacao', 0):.1f} ⭐" if emp.get("avaliacao_google") else "—",
-            ", ".join((emp.get("tipos") or [])[:3]),
         ]
         for col, val in enumerate(valores, 1):
             cell = ws.cell(row=row, column=col, value=val)
@@ -124,13 +142,13 @@ async def exportar_excel(req: ExportRequest):
         ws.row_dimensions[row].height = 20
 
     # ── Largura das colunas ─────────────────────────────────────────────────
-    larguras = [5, 12, 35, 45, 18, 18, 30, 40, 18, 30]
+    larguras = [5, 11, 32, 20, 14, 42, 17, 17, 28, 36, 16]
     for col, larg in enumerate(larguras, 1):
         ws.column_dimensions[get_column_letter(col)].width = larg
 
     # ── Rodapé ─────────────────────────────────────────────────────────────
     ultima_linha = linha_header + len(req.empresas) + 2
-    ws.merge_cells(f"A{ultima_linha}:J{ultima_linha}")
+    ws.merge_cells(f"A{ultima_linha}:K{ultima_linha}")
     ws[f"A{ultima_linha}"] = "Gerado por Sistema de Orçamentos Públicos"
     ws[f"A{ultima_linha}"].font = Font(italic=True, color="888888")
     ws[f"A{ultima_linha}"].alignment = Alignment(horizontal="center")
@@ -153,6 +171,7 @@ async def exportar_excel(req: ExportRequest):
 @router.post("/pdf")
 async def exportar_pdf(req: ExportRequest):
     """Gera PDF com a lista de empresas."""
+    req = req.normalizar()
     try:
         from reportlab.lib.pagesizes import A4, landscape
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -224,8 +243,8 @@ async def exportar_pdf(req: ExportRequest):
     elementos.append(Spacer(1, 0.4 * cm))
 
     # Tabela
-    header_row = ["#", "Relev.", "Nome", "Endereço", "Telefone", "WhatsApp", "E-mail", "Site", "⭐"]
-    col_widths = [0.8*cm, 1.4*cm, 5*cm, 6*cm, 3*cm, 3*cm, 4.5*cm, 5*cm, 1.5*cm]
+    header_row = ["#", "Relev.", "Nome", "CNPJ", "Endereço", "Telefone", "E-mail", "Site", "⭐"]
+    col_widths = [0.8*cm, 1.3*cm, 5*cm, 3.2*cm, 5.5*cm, 2.8*cm, 4.2*cm, 4.2*cm, 1.2*cm]
 
     dados = [header_row]
     estilos_linhas = []
@@ -244,10 +263,10 @@ async def exportar_pdf(req: ExportRequest):
         row = [
             str(i + 1),
             f"{rel}%",
-            Paragraph(emp.get("nome", ""), estilo_cell),
+            Paragraph(emp.get("nome", "") or emp.get("razao_social", ""), estilo_cell),
+            emp.get("cnpj", "") or "—",
             Paragraph(emp.get("endereco", ""), estilo_cell),
             emp.get("telefone", "") or "—",
-            emp.get("whatsapp", "") or "—",
             Paragraph(emp.get("email", "") or "—", estilo_cell),
             Paragraph(emp.get("site", "") or "—", estilo_cell),
             f"{emp.get('avaliacao_google') or 0:.1f}" if emp.get("avaliacao_google") else "—",
