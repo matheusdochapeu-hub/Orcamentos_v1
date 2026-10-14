@@ -302,49 +302,160 @@ function renderizarEmpresas(empresas, cidade, raio) {
 
   if (!empresas.length) {
     grid.innerHTML = '';
+    document.getElementById('filtros-empresas')?.classList.add('hidden');
     semRes.classList.remove('hidden');
     return;
   }
   semRes.classList.add('hidden');
 
-  grid.innerHTML = empresas.map(emp => {
-    const rel = Math.round(emp.relevancia || 0);
-    const relClass = rel >= 70 ? 'rel-alto' : rel >= 40 ? 'rel-medio' : 'rel-baixo';
-    const stars = emp.avaliacao_google ? `⭐ ${Number(emp.avaliacao_google).toFixed(1)}` : '';
-    const phone = emp.telefone ? `<a href="tel:${emp.telefone}" class="emp-link">📞 ${escapeHtml(emp.telefone)}</a>` : '';
-    const wpp   = emp.whatsapp  ? `<a href="https://wa.me/${emp.whatsapp.replace(/\D/g,'')}" target="_blank" class="emp-link">💬 WhatsApp</a>` : '';
-    const site  = emp.site      ? `<a href="${encodeURI(emp.site)}" target="_blank" class="emp-link">🌐 Site</a>` : '';
-    const email = emp.email     ? `<a href="mailto:${escapeAttr(emp.email)}" class="emp-link">✉️ ${escapeHtml(emp.email)}</a>` : '';
+  // Guarda a lista completa para os filtros/ordenação atuarem sobre ela
+  ESTADO.empresasBase = empresas.slice();
+  montarBarraFiltros();
+  renderGridEmpresas();
+}
 
-    // Linha de identificação (CNPJ + CNAE), relevante para dados da Receita
-    const cnpjLinha = emp.cnpj
-      ? `<div class="empresa-cnpj">🧾 CNPJ: ${escapeHtml(emp.cnpj)}${emp.situacao ? ` · <span class="emp-situacao">${escapeHtml(emp.situacao)}</span>` : ''}</div>`
-      : '';
-    const cnaeLinha = emp.cnae_principal
-      ? `<div class="empresa-cnae">🏷️ CNAE ${escapeHtml(emp.cnae_principal)}${emp.cnae_descricao ? ` — ${escapeHtml(emp.cnae_descricao)}` : ''}</div>`
-      : '';
+// Nome a exibir (prioriza fantasia; mantém razão social como subtítulo)
+function nomeFantasia(emp) {
+  const fant = (emp.nome_fantasia || '').trim();
+  const nome = (emp.nome || '').trim();
+  const razao = (emp.razao_social || '').trim();
+  // emp.nome vem como fantasia-ou-razão do backend; preferimos a fantasia real
+  return fant || nome || razao || 'Empresa';
+}
 
-    const nomeExib = emp.nome || emp.razao_social || 'Empresa';
-    const distBadge = (emp.distancia_km !== null && emp.distancia_km !== undefined)
-      ? `<span class="emp-dist">📏 ${Number(emp.distancia_km).toFixed(1)} km</span>`
-      : '';
+// ── Barra de filtros/ordenação (montada uma vez por busca) ──
+function montarBarraFiltros() {
+  const barra = document.getElementById('filtros-empresas');
+  if (!barra) return;
+  barra.classList.remove('hidden');
+  // valores atuais (preserva se o usuário já tinha escolhido)
+  const ordem   = ESTADO.filtros?.ordem   || 'relevancia';
+  const soTel   = ESTADO.filtros?.soTelefone || false;
+  const chance  = ESTADO.filtros?.chanceMin || 0;
+  barra.innerHTML = `
+    <div class="filtro-item">
+      <label>Ordenar por</label>
+      <select id="f-ordem" onchange="aplicarFiltros()">
+        <option value="relevancia" ${ordem==='relevancia'?'selected':''}>Chance de ter o produto (maior)</option>
+        <option value="alfabetica" ${ordem==='alfabetica'?'selected':''}>Ordem alfabética (A–Z)</option>
+        <option value="distancia"  ${ordem==='distancia'?'selected':''}>Distância (mais perto)</option>
+      </select>
+    </div>
+    <div class="filtro-item">
+      <label>Chance mínima</label>
+      <select id="f-chance" onchange="aplicarFiltros()">
+        <option value="0"  ${chance===0?'selected':''}>Todas</option>
+        <option value="40" ${chance===40?'selected':''}>≥ 40%</option>
+        <option value="70" ${chance===70?'selected':''}>≥ 70%</option>
+      </select>
+    </div>
+    <label class="filtro-check">
+      <input type="checkbox" id="f-tel" ${soTel?'checked':''} onchange="aplicarFiltros()">
+      Só com telefone
+    </label>
+    <div class="filtro-contagem" id="filtro-contagem"></div>
+  `;
+}
 
-    return `
-      <div class="empresa-card">
-        <div class="empresa-header">
-          <div class="empresa-nome">${escapeHtml(nomeExib)} ${distBadge}</div>
-          <div class="empresa-rel ${relClass}">${rel}%</div>
+function aplicarFiltros() {
+  ESTADO.filtros = {
+    ordem:      document.getElementById('f-ordem')?.value || 'relevancia',
+    chanceMin:  parseInt(document.getElementById('f-chance')?.value || '0', 10),
+    soTelefone: document.getElementById('f-tel')?.checked || false,
+  };
+  renderGridEmpresas();
+}
+
+function renderGridEmpresas() {
+  const grid = document.getElementById('empresa-grid');
+  const base = ESTADO.empresasBase || [];
+  const f = ESTADO.filtros || { ordem: 'relevancia', chanceMin: 0, soTelefone: false };
+
+  let lista = base.filter(emp => {
+    if (f.soTelefone && !(emp.telefone && emp.telefone.trim())) return false;
+    if (f.chanceMin && Math.round(emp.relevancia || 0) < f.chanceMin) return false;
+    return true;
+  });
+
+  const colator = (a, b) => (a || '').localeCompare(b || '', 'pt-BR', { sensitivity: 'base' });
+  if (f.ordem === 'alfabetica') {
+    lista.sort((a, b) => colator(nomeFantasia(a), nomeFantasia(b)));
+  } else if (f.ordem === 'distancia') {
+    lista.sort((a, b) => {
+      const da = a.distancia_km ?? Infinity, db = b.distancia_km ?? Infinity;
+      return da - db;
+    });
+  } else { // relevancia
+    lista.sort((a, b) => (b.relevancia || 0) - (a.relevancia || 0));
+  }
+
+  const cont = document.getElementById('filtro-contagem');
+  if (cont) cont.textContent = `${lista.length} de ${base.length}`;
+
+  // A lista exibida é a que será exportada/salva
+  ESTADO.empresas = lista;
+
+  if (!lista.length) {
+    grid.innerHTML = `<div class="card text-center" style="padding:32px;color:var(--texto-leve)">
+      Nenhuma empresa atende aos filtros selecionados.</div>`;
+    return;
+  }
+
+  grid.innerHTML = lista.map(emp => cardEmpresa(emp)).join('');
+}
+
+function cardEmpresa(emp) {
+  const rel = Math.round(emp.relevancia || 0);
+  const relClass = rel >= 70 ? 'rel-alto' : rel >= 40 ? 'rel-medio' : 'rel-baixo';
+  const relRotulo = rel >= 70 ? 'alta' : rel >= 40 ? 'média' : 'baixa';
+
+  const telRaw = (emp.telefone || '').trim();
+  const telDigits = telRaw.replace(/\D/g, '');
+  const stars = emp.avaliacao_google ? `⭐ ${Number(emp.avaliacao_google).toFixed(1)}` : '';
+  const wpp   = emp.whatsapp ? `<a href="https://wa.me/${emp.whatsapp.replace(/\D/g,'')}" target="_blank" class="emp-link">💬 WhatsApp</a>` : '';
+  const site  = emp.site     ? `<a href="${encodeURI(emp.site)}" target="_blank" class="emp-link">🌐 Site</a>` : '';
+  const email = emp.email    ? `<a href="mailto:${escapeAttr(emp.email)}" class="emp-link emp-link-secundario">✉️ ${escapeHtml(emp.email)}</a>` : '';
+
+  // Telefone EM EVIDÊNCIA (bloco destacado + clicável)
+  const telBloco = telDigits
+    ? `<a href="tel:${telDigits}" class="empresa-telefone"><span class="tel-icone">📞</span>
+         <span class="tel-numero">${escapeHtml(telRaw)}</span>
+         <span class="tel-acao">Ligar</span></a>`
+    : `<div class="empresa-telefone sem-telefone">📵 Sem telefone cadastrado</div>`;
+
+  // Nome fantasia em destaque; razão social como subtítulo (se diferente)
+  const nome = nomeFantasia(emp);
+  const razao = (emp.razao_social || '').trim();
+  const subRazao = (razao && razao.toLowerCase() !== nome.toLowerCase())
+    ? `<div class="empresa-razao">Razão social: ${escapeHtml(razao)}</div>` : '';
+
+  const distBadge = (emp.distancia_km !== null && emp.distancia_km !== undefined)
+    ? `<span class="emp-dist">📏 ${Number(emp.distancia_km).toFixed(1)} km</span>` : '';
+
+  const cnpjLinha = emp.cnpj
+    ? `<div class="empresa-cnpj">🧾 CNPJ: ${escapeHtml(emp.cnpj)}${emp.situacao ? ` · <span class="emp-situacao">${escapeHtml(emp.situacao)}</span>` : ''}</div>` : '';
+  const cnaeLinha = emp.cnae_principal
+    ? `<div class="empresa-cnae">🏷️ CNAE ${escapeHtml(emp.cnae_principal)}${emp.cnae_descricao ? ` — ${escapeHtml(emp.cnae_descricao)}` : ''}</div>` : '';
+
+  const extras = [wpp, site, email].filter(Boolean).join('');
+
+  return `
+    <div class="empresa-card">
+      <div class="empresa-header">
+        <div>
+          <div class="empresa-nome">${escapeHtml(nome)} ${distBadge}</div>
+          ${subRazao}
         </div>
-        <div class="empresa-endereco">📍 ${escapeHtml(emp.endereco || '—')}</div>
-        ${cnpjLinha}
-        ${cnaeLinha}
-        ${stars ? `<div class="empresa-avaliacao">${stars} (${emp.total_avaliacoes || 0} avaliações)</div>` : ''}
-        <div class="empresa-contatos">
-          ${phone}${wpp}${site}${email}
-        </div>
-        ${emp.descricao ? `<div class="empresa-desc">${escapeHtml(emp.descricao)}</div>` : ''}
-      </div>`;
-  }).join('');
+        <div class="empresa-rel ${relClass}" title="Chance de ter o produto: ${relRotulo}">${rel}%</div>
+      </div>
+      <div class="empresa-endereco">📍 ${escapeHtml(emp.endereco || '—')}</div>
+      ${cnpjLinha}
+      ${cnaeLinha}
+      ${stars ? `<div class="empresa-avaliacao">${stars} (${emp.total_avaliacoes || 0} avaliações)</div>` : ''}
+      ${telBloco}
+      ${extras ? `<div class="empresa-contatos">${extras}</div>` : ''}
+      ${emp.descricao ? `<div class="empresa-desc">${escapeHtml(emp.descricao)}</div>` : ''}
+    </div>`;
 }
 
 // ═══════════════════ EXPORTAR ════════════════════════════════

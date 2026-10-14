@@ -16,7 +16,8 @@ def empresa_vazia() -> dict:
         # Identificação
         "id": "",                 # identificador único na fonte (place_id, cnpj…)
         "fonte": "",              # "receita" | "google"
-        "nome": "",               # nome fantasia / razão social / name
+        "nome": "",               # nome de exibição (fantasia; senão razão social)
+        "nome_fantasia": "",      # nome fantasia puro (quando houver)
         "razao_social": "",
         "cnpj": "",
         # Localização
