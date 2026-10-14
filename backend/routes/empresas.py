@@ -77,6 +77,15 @@ async def buscar_empresas(req: BuscaEmpresasRequest):
         tipo_busca=req.tipo_busca,
     )
 
+    # Cruzamento opcional com CEIS/CNEP (empresas sancionadas) — só roda se a
+    # chave do Portal da Transparência estiver configurada; degrada em silêncio.
+    try:
+        from services.sancoes import marcar_sancoes, habilitado
+        if habilitado():
+            empresas = await marcar_sancoes(empresas)
+    except Exception as e:
+        print(f"[Sancoes] ignorado: {e}")
+
     return {
         "total": len(empresas),
         "empresas": empresas,

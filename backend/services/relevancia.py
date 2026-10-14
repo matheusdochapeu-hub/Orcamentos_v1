@@ -70,11 +70,16 @@ def calcular_relevancia(
     hits_nome = sum(1 for p in palavras if p in nome_emp)
     score += (hits_nome / len(palavras)) * 25
 
-    # ── 2. Palavras-chave em site/reviews/descrição + CNAE ─────────────────
+    # ── 2. Palavras-chave em site/reviews/descrição + CNAE (principal e
+    #       secundários) ───────────────────────────────────────────────────
+    cnaes_sec_txt = " ".join(
+        (c.get("descricao") or "") for c in (empresa.get("cnaes_secundarios") or [])
+    )
     textos_extra = " ".join([
         empresa.get("site", ""),
         empresa.get("descricao", ""),
         empresa.get("cnae_descricao", ""),
+        cnaes_sec_txt,
         " ".join(empresa.get("reviews", [])),
     ])
     texto_extra_norm = _normalizar(textos_extra)

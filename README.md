@@ -61,6 +61,18 @@ nada. As fontes são:
 > empresas recebem um piso alto de relevância e o selo ✓. A Receita entra como
 > complemento de cobertura. Há um filtro **"Só quem já forneceu"** nos resultados.
 
+### Cruzamentos adicionais de dados
+
+- **CNAEs secundários:** além da atividade principal, o sistema cruza os
+  **CNAEs secundários** da empresa com o item buscado — uma empresa de "comércio
+  geral" com secundário de "móveis/estofados" sobe na relevância.
+- **Mais contatos:** quando disponíveis, mostra **2º telefone** e **e-mail**
+  (além do telefone principal em destaque).
+- **Empresas sancionadas (CEIS/CNEP) — opcional:** se você configurar uma chave
+  gratuita do Portal da Transparência (`PORTAL_TRANSPARENCIA_KEY`), as empresas
+  **impedidas de contratar** com a administração pública recebem um alerta 🚫 e
+  podem ser ocultadas com um filtro. Sem a chave, esse cruzamento é ignorado.
+
 > A seleção de fonte **não aparece na tela**. Se uma chave do Google estiver
 > configurada, ela entra automaticamente na busca; caso contrário, o sistema
 > usa apenas a Receita, de forma transparente.
