@@ -6,9 +6,13 @@ paralelo, combina os resultados, deduplica (por CNPJ ou place_id/nome) e
 devolve uma lista única no schema canônico.
 
 Fontes aceitas (parâmetro `fontes`):
-  - "receita" : base CNPJ da Receita Federal (padrão, não precisa de Maps)
+  - "pncp"    : quem JÁ FORNECEU o item ao poder público (alta confiança)
+  - "receita" : base CNPJ da Receita Federal por CNAE (cobertura)
   - "google"  : Google Maps/Places (só se a chave estiver configurada)
-  - "ambas"   : combina as duas
+  - "ambas"/"todas" : combina PNCP + Receita + Google (padrão do app)
+
+Estratégia híbrida: o PNCP traz quem comprovadamente vende o produto (vai pro
+topo), e a Receita/CNAE completa a lista. O Google entra se houver chave.
 """
 from __future__ import annotations
 
@@ -16,20 +20,22 @@ import asyncio
 
 from services.empresas.receita_cnpj import ProvedorReceita
 from services.empresas.google_maps import ProvedorGoogle
+from services.empresas.pncp import ProvedorPNCP
 
 _PROVEDORES = {
+    "pncp": ProvedorPNCP(),
     "receita": ProvedorReceita(),
     "google": ProvedorGoogle(),
 }
 
 
 def _resolver_fontes(fontes: str) -> list[str]:
-    f = (fontes or "receita").strip().lower()
-    if f in ("ambas", "todas", "both"):
-        return ["receita", "google"]
+    f = (fontes or "ambas").strip().lower()
+    if f in ("ambas", "todas", "both", "hibrido", "híbrido"):
+        return ["pncp", "receita", "google"]
     if f in _PROVEDORES:
         return [f]
-    return ["receita"]  # padrão seguro
+    return ["pncp", "receita"]  # padrão seguro = híbrido de alta precisão
 
 
 def _chave_dedup(emp: dict) -> str:
@@ -95,23 +101,39 @@ async def buscar_empresas_agregado(
     resultados = await asyncio.gather(*tarefas, return_exceptions=True)
 
     combinadas: list[dict] = []
-    vistos: set[str] = set()
+    por_chave: dict[str, dict] = {}
     fontes_usadas: list[str] = []
 
+    # Processa na ordem de 'ativos' (pncp primeiro → alta confiança tem prioridade)
     for nome, res in zip(ativos, resultados):
         if isinstance(res, Exception):
-            # Mensagem amigável e visível ao usuário (não contém palavras que o
-            # frontend filtra). Serve de diagnóstico quando a busca falha.
-            avisos.append(f"⚠️ {res}")
+            # PNCP é complemento de precisão: não deve incomodar o usuário se
+            # falhar. Só mostramos ⚠️ para a Receita (fonte principal).
+            if nome == "pncp":
+                avisos.append(f"[interno] PNCP indisponível: {res}")
+            else:
+                avisos.append(f"⚠️ {res}")
             continue
         if res:
             fontes_usadas.append(nome)
         for emp in res:
             k = _chave_dedup(emp)
-            if k in vistos:
+            if k in por_chave:
+                # Já existe (provavelmente veio do PNCP): preserva o selo de
+                # "já forneceu" e completa dados que faltarem (ex.: telefone).
+                existente = por_chave[k]
+                if emp.get("ja_forneceu"):
+                    existente["ja_forneceu"] = True
+                for campo in ("telefone", "email", "site", "endereco",
+                              "cnae_principal", "cnae_descricao", "nome_fantasia"):
+                    if not existente.get(campo) and emp.get(campo):
+                        existente[campo] = emp[campo]
                 continue
-            vistos.add(k)
+            por_chave[k] = emp
             combinadas.append(emp)
+
+    # Empresas que já forneceram o item ao poder público vêm primeiro.
+    combinadas.sort(key=lambda e: (0 if e.get("ja_forneceu") else 1))
 
     return {
         "empresas": combinadas[:max_empresas],
