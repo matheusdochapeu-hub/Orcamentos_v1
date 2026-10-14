@@ -41,6 +41,7 @@ import httpx
 
 from services.empresas.base import ProvedorEmpresas, empresa_vazia
 from services.cnae_map import mapear_cnaes, formatar_cnae
+from services import geocode
 
 TIMEOUT = 25.0
 CACHE_DB = Path(__file__).resolve().parent.parent.parent / "database" / "catmat_cache.db"
@@ -293,4 +294,78 @@ class ProvedorReceita(ProvedorEmpresas):
                 emp["municipio"] = municipio
             if not emp["uf"]:
                 emp["uf"] = uf
+
+        # ── RAIO REAL em km (sem Google) ──────────────────────────────────
+        # A base da Receita filtra por município/UF, não por km. Aqui
+        # geocodificamos (via OpenStreetMap, com cache) o centro informado e o
+        # município/endereço de cada empresa, calculamos a distância (Haversine)
+        # e descartamos quem estiver fora do raio. Se a geocodificação do centro
+        # falhar, mantemos o resultado por município (sem filtro fino).
+        empresas = await self._aplicar_raio(
+            empresas, cidade=municipio, uf=uf, raio_km=raio_km,
+            lat_centro=lat, lng_centro=lng,
+        )
         return empresas[:max_empresas]
+
+    async def _aplicar_raio(self, empresas, *, cidade, uf, raio_km,
+                            lat_centro=None, lng_centro=None):
+        """Filtra as empresas pela distância real ao centro da busca (km)."""
+        if not empresas:
+            return empresas
+
+        # 1) centro da busca
+        if lat_centro is None or lng_centro is None:
+            centro = await geocode.geocodificar(
+                f"{cidade}, {uf}, Brasil" if uf else f"{cidade}, Brasil"
+            )
+            if not centro:
+                return empresas  # sem centro → não dá p/ medir; devolve como veio
+            lat_centro, lng_centro = centro["lat"], centro["lng"]
+
+        # 2) coordenada de cada empresa (cache por município evita repetir)
+        #    agrupa por município p/ geocodificar uma vez por município.
+        por_municipio: dict[str, list[dict]] = {}
+        for emp in empresas:
+            chave = f"{emp.get('municipio','').strip()}|{(emp.get('uf') or uf).strip()}"
+            por_municipio.setdefault(chave, []).append(emp)
+
+        # Salvaguarda: geocodificar muitos municípios é lento (Nominatim ~1 req/s).
+        # Na prática a busca é por 1 município, então isso raramente dispara.
+        MAX_MUNICIPIOS_GEO = 12
+        if len(por_municipio) > MAX_MUNICIPIOS_GEO:
+            for grupo in por_municipio.values():
+                for emp in grupo:
+                    emp["distancia_km"] = None
+            return empresas
+
+        for chave, grupo in por_municipio.items():
+            mun, ufx = (chave.split("|") + [""])[:2]
+            if not mun:
+                # sem município → assume no raio (resultado já veio do filtro de UF)
+                for emp in grupo:
+                    emp["distancia_km"] = None
+                continue
+            geo = await geocode.geocodificar(
+                f"{mun}, {ufx}, Brasil" if ufx else f"{mun}, Brasil"
+            )
+            await asyncio.sleep(1.0)  # respeita o limite do Nominatim (1 req/s)
+            if not geo:
+                for emp in grupo:
+                    emp["distancia_km"] = None
+                continue
+            d = round(
+                geocode.distancia_km(lat_centro, lng_centro, geo["lat"], geo["lng"]), 1
+            )
+            for emp in grupo:
+                emp["lat"] = emp["lat"] or geo["lat"]
+                emp["lng"] = emp["lng"] or geo["lng"]
+                emp["distancia_km"] = d
+
+        # 3) filtra pelo raio (mantém quem não pôde ser medido)
+        dentro = [
+            e for e in empresas
+            if e.get("distancia_km") is None or e["distancia_km"] <= raio_km
+        ]
+        # ordena por distância (medidos primeiro, mais perto antes)
+        dentro.sort(key=lambda e: (e.get("distancia_km") is None, e.get("distancia_km") or 0))
+        return dentro

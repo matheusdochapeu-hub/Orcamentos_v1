@@ -342,11 +342,14 @@ function renderizarEmpresas(empresas, cidade, raio) {
       : '';
 
     const nomeExib = emp.nome || emp.razao_social || 'Empresa';
+    const distBadge = (emp.distancia_km !== null && emp.distancia_km !== undefined)
+      ? `<span class="emp-dist">📏 ${Number(emp.distancia_km).toFixed(1)} km</span>`
+      : '';
 
     return `
       <div class="empresa-card">
         <div class="empresa-header">
-          <div class="empresa-nome">${escapeHtml(nomeExib)} ${fonteBadge}</div>
+          <div class="empresa-nome">${escapeHtml(nomeExib)} ${fonteBadge}${distBadge}</div>
           <div class="empresa-rel ${relClass}">${rel}%</div>
         </div>
         <div class="empresa-endereco">📍 ${escapeHtml(emp.endereco || '—')}</div>

@@ -102,6 +102,65 @@ _MAPA_MATERIAL: dict[str, list[str]] = {
     "fardamento":   ["4781400", "1412601"],
     "tecido":       ["4755501", "1340502"],
     "calcado":      ["4782201", "1531901"],
+    "bota":         ["4782201", "1531901"],
+
+    # Mobiliário escolar / infantil
+    "berco":        ["4754701", "3101200"],
+    "colchao":      ["4754701", "3104700"],
+
+    # Eletrodomésticos / linha branca
+    "geladeira":    ["4753900", "2751100"],
+    "refrigerador": ["4753900", "2751100"],
+    "fogao":        ["4753900", "2751100"],
+    "ventilador":   ["4753900", "2751100"],
+    "ar":           ["4753900", "4322302"],
+    "climatizador": ["4753900", "4322302"],
+    "bebedouro":    ["4753900", "4649499"],
+    "eletrodomestico": ["4753900"],
+
+    # Pneus/baterias/lubrificantes (frota)
+    "bateria":      ["4530703", "4664800"],
+    "oleo":         ["4681805", "4732600"],
+    "lubrificante": ["4681805", "4732600"],
+
+    # Material gráfico / sinalização
+    "banner":       ["1813099", "1813001"],
+    "placa":        ["1813099", "2599399"],
+    "cracha":       ["1813099", "1813001"],
+    "carimbo":      ["4761003", "1813099"],
+
+    # Material elétrico detalhado / iluminação
+    "lampada":      ["4742300", "4673700"],
+    "luminaria":    ["4742300", "4753900"],
+    "cabo":         ["4673700", "4742300"],
+    "disjuntor":    ["4742300", "4673700"],
+
+    # Insumos de laboratório / químicos
+    "reagente":     ["4644301", "4664800"],
+    "laboratorio":  ["4664800", "4645101"],
+    "quimico":      ["4684201", "4664800"],
+
+    # Pet / zoonoses / agropecuária
+    "racao":        ["4623108", "4789004"],
+    "veterinario":  ["4771704", "4789004"],
+    "agricola":     ["4661300", "4692300"],
+    "semente":      ["4692300", "4661300"],
+    "ferramenta agricola": ["4661300", "4744005"],
+
+    # Mobiliário urbano / segurança / incêndio
+    "extintor":     ["4789099", "8020001"],
+    "sinalizacao":  ["2599399", "1813099"],
+    "epi completo": ["4642701"],
+    "capacete":     ["4642701", "4789099"],
+
+    # Esporte / lazer
+    "esportivo":    ["4763601", "3230200"],
+    "brinquedo":    ["4763604", "3240001"],
+
+    # Combustível detalhado
+    "gasolina":     ["4731800", "4681801"],
+    "diesel":       ["4731800", "4681801"],
+    "gas":          ["4784900", "4682600"],
 }
 
 
@@ -145,6 +204,55 @@ _MAPA_SERVICO: dict[str, list[str]] = {
     "lavanderia":     ["9601701", "9601703"],
     "telefonia":      ["6110803", "6190601"],
     "internet":       ["6110803", "6190601"],
+
+    # Mais serviços comuns em compra pública
+    "coleta":         ["3811400", "3812200"],
+    "residuo":        ["3811400", "3812200"],
+    "lixo":           ["3811400", "3812200"],
+    "esgoto":         ["3600602", "3701100"],
+    "agua":           ["3600601"],
+    "cftv":           ["8020001", "4321500"],
+    "monitoramento":  ["8020001", "8020002"],
+    "alarme":         ["8020001", "8020002"],
+    "elevador":       ["4329101", "3314710"],
+    "gerador":        ["3314710", "4321500"],
+    "topografia":     ["7119701"],
+    "laudo":          ["7119703", "7120100"],
+    "projeto":        ["7111100", "7112000"],
+    "arquitetura":    ["7111100"],
+    "evento":         ["8230001", "8230002"],
+    "cerimonial":     ["8230001"],
+    "fotografia":     ["7420001", "7420004"],
+    "filmagem":       ["5911199", "7420004"],
+    "publicidade":    ["7311400", "7319002"],
+    "comunicacao":    ["7311400", "6391700"],
+    "traducao":       ["7490103"],
+    "pesquisa":       ["7320300", "7210000"],
+    "recrutamento":   ["7810800", "7820500"],
+    "estagio":        ["7810800"],
+    "motorista":      ["4921301", "4923002"],
+    "ambulancia":     ["8621601", "8622400"],
+    "guincho":        ["5229002"],
+    "funerario":      ["9603301", "9603302"],
+    "copa":           ["5620101", "8121400"],
+    "recepcao":       ["8211300", "8219999"],
+    "digitalizacao":  ["8219999", "6209100"],
+    "contrato":       ["6911701", "7020400"],
+    "auditoria":      ["6920601", "7020400"],
+    "banco de dados": ["6311900", "6204000"],
+    "nuvem":          ["6311900", "6204000"],
+    "hospedagem":     ["6311900", "5510801"],
+    "hotel":          ["5510801", "5510802"],
+    "passagem":       ["7911200", "7912100"],
+    "viagem":         ["7911200", "7912100"],
+    "combate incendio": ["8020001", "8011102"],
+    "bombeiro":       ["8011102", "8020001"],
+    "piscina":        ["8130300", "4322303"],
+    "poda":           ["8130300"],
+    "pintura predial": ["4330404"],
+    "serralheria":    ["2512800", "4330402"],
+    "marcenaria":     ["3101200", "4330404"],
+    "vidracaria":     ["4330405", "2311700"],
 }
 
 
@@ -189,13 +297,24 @@ def mapear_cnaes(nome_item: str, tipo_cat: str, descricao: str = "") -> list[str
                     vistos.add(c)
                     cnaes.append(c)
 
-    # 2) depois palavras simples
+    # 2) depois palavras simples (casa por radical, evitando falsos positivos
+    #    de chaves muito curtas tipo "ar" dentro de "para")
     palavras = set(texto.split())
     for chave, lista in mapa.items():
         if " " in chave:
             continue
-        # casa por radical: "cadeiras" casa com "cadeira"
-        if any(chave in p or p in chave for p in palavras if len(p) >= 4):
+        casou = False
+        for p in palavras:
+            if len(p) < 3:
+                continue
+            if p == chave:
+                casou = True
+                break
+            # radical só vale para chaves/palavras com 4+ caracteres
+            if len(chave) >= 4 and len(p) >= 4 and (chave in p or p in chave):
+                casou = True
+                break
+        if casou:
             for c in lista:
                 if c not in vistos:
                     vistos.add(c)

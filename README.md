@@ -62,6 +62,15 @@ O mapa é facilmente expansível — basta adicionar palavras-chave → CNAEs.
 > (configurável em `RECEITA_BACKEND` no `.env`: `casadosdados`, `cnpja` ou um
 > endpoint próprio `custom`, com fallback automático entre elas).
 
+### Raio real em km (também sem Google)
+
+A base da Receita entrega empresas por **município/UF**. Para respeitar o
+**raio em km**, o sistema geocodifica (via **OpenStreetMap/Nominatim**, grátis e
+sem chave, com cache local) o centro da busca e o município de cada empresa,
+calcula a distância real (Haversine) e descarta quem está fora do raio. Se a
+geocodificação falhar, a busca continua por município (sem o filtro fino),
+em vez de quebrar. A distância aparece em cada card de empresa.
+
 ---
 
 ## Configuração das APIs
@@ -111,6 +120,7 @@ Orçamentos/
 │   └── services/
 │       ├── governo_api.py     ← Busca CATMAT/CATSER (online + cache fallback)
 │       ├── cnae_map.py        ← Mapeia item → CNAEs (p/ busca na Receita)
+│       ├── geocode.py         ← Geocodificação OSM/Nominatim + raio real (km)
 │       ├── maps_api.py        ← Integração Google Maps/Places (baixo nível)
 │       ├── relevancia.py      ← Algoritmo de relevância (adapta por fonte)
 │       ├── gemini_api.py      ← Integração Gemini (opcional)
