@@ -60,8 +60,15 @@ class ProvedorGoogle(ProvedorEmpresas):
         **kwargs,
     ) -> list[dict]:
         if lat is None or lng is None:
-            coords = await maps_api.geocodificar_cidade(cidade, estado)
-            lat, lng = coords["lat"], coords["lng"]
+            try:
+                coords = await maps_api.geocodificar_cidade(cidade, estado)
+                lat, lng = coords["lat"], coords["lng"]
+            except Exception as e:
+                # Google é fonte complementar: se a geocodificação falhar (chave
+                # sem Geocoding API, cota, cidade não achada), não derruba a busca
+                # — apenas não contribui com resultados do Google.
+                print(f"[Google] geocodificação falhou, ignorando fonte Google: {e}")
+                return []
 
         brutos = await maps_api.buscar_todas_empresas(
             lat=lat,

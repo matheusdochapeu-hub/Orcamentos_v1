@@ -72,6 +72,11 @@ O mapa é facilmente expansível — basta adicionar palavras-chave → CNAEs.
 > Se a consulta à base falhar (URL errada, instância fora do ar, limite de
 > requisições), o sistema **mostra o motivo na tela** em vez de simplesmente
 > retornar "0 empresas".
+>
+> O MinhaReceita filtra o município pelo **código IBGE** (não pelo nome). O app
+> resolve isso automaticamente via a API pública de Localidades do IBGE
+> (`servicodados.ibge.gov.br`), convertendo "cidade + UF" no código correto.
+> Por isso **selecionar o Estado (UF)** torna a busca mais precisa.
 
 ### Raio real em km (também sem Google)
 
