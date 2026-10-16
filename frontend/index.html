@@ -9,7 +9,7 @@
 
   <!-- PWA (instalável como app) -->
   <link rel="manifest" href="/manifest.webmanifest" />
-  <meta name="theme-color" content="#0F2E4D" />
+  <meta name="theme-color" content="#10213A" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -20,10 +20,10 @@
 
 <!-- ═══════════════════ HEADER ═══════════════════ -->
 <header class="header">
-  <div class="header-logo">🏛️</div>
+  <div class="header-logo">🔎</div>
   <div class="header-text">
-    <h1>Sistema de Orçamentos Públicos</h1>
-    <p>Busca inteligente de fornecedores para compras públicas</p>
+    <h1>Orçamentos Públicos</h1>
+    <p>Encontre fornecedores para suas compras — em um só lugar</p>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline" onclick="abrirModalBuscasSalvas()" style="color:#fff;border-color:rgba(255,255,255,.4);">
@@ -39,12 +39,12 @@
 <div class="stepper">
   <div class="step ativo" id="step-1">
     <div class="step-circle">1</div>
-    <div class="step-label">Identificar<br>Necessidade</div>
+    <div class="step-label">O que<br>você precisa</div>
   </div>
   <div class="step-line" id="line-1"></div>
   <div class="step" id="step-2">
     <div class="step-circle">2</div>
-    <div class="step-label">Selecionar<br>CATMAT/CATSER</div>
+    <div class="step-label">Escolher<br>o item</div>
   </div>
   <div class="step-line" id="line-2"></div>
   <div class="step" id="step-3">
@@ -313,7 +313,7 @@
       </small>
     </div>
 
-    <div class="config-row" style="background:#eef6ff;border-color:#bfdbfe">
+    <div class="config-row" style="background:var(--ouro-claro);border-color:#e3d3a8">
       <span>🧭</span>
       <label style="font-weight:400;font-size:.82rem;color:var(--texto)">
         A busca por estabelecimentos em mapa (OpenStreetMap/Geoapify) já vem

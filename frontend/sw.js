@@ -4,7 +4,7 @@
      para abrir rápido e funcionar mesmo com conexão ruim.
    - API (/api/...): SEMPRE rede (nunca cacheia) — os dados precisam ser atuais.
 */
-const CACHE = 'orcamentos-shell-v1';
+const CACHE = 'orcamentos-shell-v2';
 const SHELL = [
   '/',
   '/static/css/style.css',
