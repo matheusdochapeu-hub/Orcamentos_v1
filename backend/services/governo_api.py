@@ -206,6 +206,19 @@ async def _buscar_online(tipo: str, texto_busca: str,
         endpoint = f"{BASE_API}/modulo-servico/6_consultarItemServico"
         chaves_param = ["nomeServico", "descricao", "termo"]
 
+    # Palavra(s) OBRIGATÓRIA(S): a mais significativa da query (a mais longa) +
+    # suas variações/sinônimos. Um item só entra se casar PELO MENOS uma delas —
+    # isso evita que uma resposta não-filtrada da API vire "resultado aleatório".
+    principal = max(palavras_base, key=len) if palavras_base else (palavras_base[0] if palavras_base else "")
+    obrigatorias = set([principal] + _SINONIMOS.get(principal, []))
+    obrigatorias = {o for o in obrigatorias if len(o) >= 3}
+
+    def _item_casa_obrigatoria(texto_item_norm: str, tokens: list[str]) -> bool:
+        for o in obrigatorias:
+            if _match_palavra(o, tokens, texto_item_norm) >= 0.85:
+                return True
+        return False
+
     resultados: list[dict] = []
     async with httpx.AsyncClient(
         timeout=TIMEOUT, headers={"Accept": "application/json"}
@@ -222,31 +235,44 @@ async def _buscar_online(tipo: str, texto_busca: str,
                 if not itens:
                     continue
 
+                parciais: list[dict] = []
+                casam_obrig = 0
                 for item in itens:
                     if tipo == "material":
                         cod = item.get("codigoItem", "")
                         nome_pdm = item.get("nomePdm", "") or ""
                         desc = item.get("descricaoItem", "") or ""
-                        score = _calcular_score(query_norm, palavras_q,
-                                                f"{nome_pdm} {desc}")
-                        if score >= _LIMIAR:
-                            resultados.append(
-                                _montar_resultado_material(cod, nome_pdm, desc, score)
-                            )
+                        texto = f"{nome_pdm} {desc}"
+                        montar = lambda s: _montar_resultado_material(cod, nome_pdm, desc, s)
                     else:
                         cod = item.get("codigoServico", "")
                         nome_srv = item.get("nomeServico", "") or ""
                         nome_cls = item.get("nomeClasse", "") or ""
                         nome_grp = item.get("nomeGrupo", "") or ""
-                        score = _calcular_score(query_norm, palavras_q,
-                                                f"{nome_srv} {nome_cls} {nome_grp}")
-                        if score >= _LIMIAR:
-                            resultados.append(
-                                _montar_resultado_servico(cod, nome_srv, nome_cls,
-                                                          nome_grp, score)
-                            )
-                if resultados:
-                    break  # parâmetro funcionou
+                        texto = f"{nome_srv} {nome_cls} {nome_grp}"
+                        montar = lambda s: _montar_resultado_servico(cod, nome_srv, nome_cls, nome_grp, s)
+
+                    alvo = _norm(texto)
+                    tokens = alvo.split()
+                    casa_obrig = _item_casa_obrigatoria(alvo, tokens)
+                    if casa_obrig:
+                        casam_obrig += 1
+                    score = _calcular_score(query_norm, palavras_q, texto)
+                    # SÓ entra se casar a palavra principal (ou sinônimo). Isso
+                    # corta o "ruído" de respostas que a API não filtrou.
+                    if casa_obrig and score >= _LIMIAR:
+                        parciais.append(montar(score))
+
+                # Heurística anti-ruído: se quase NENHUM item casou a palavra
+                # principal, a API provavelmente ignorou este parâmetro (devolveu
+                # catálogo genérico). Descarta e tenta o próximo parâmetro.
+                fracao = casam_obrig / max(len(itens), 1)
+                if fracao < 0.03 and len(itens) >= 20:
+                    continue
+
+                if parciais:
+                    resultados = parciais
+                    break  # parâmetro realmente filtrou
             except Exception as e:
                 print(f"[Online {tipo}/{chave}] {e}")
                 continue
@@ -374,6 +400,14 @@ def _buscar_no_cache(tipo: str, query: str, descricao: str,
     termos = termos[:10]
     like_params = [f"%{t}%" for t in termos]
 
+    # Palavra principal obrigatória (igual à busca online), para não devolver ruído.
+    palavras_base = _palavras(texto_busca)
+    principal = max(palavras_base, key=len) if palavras_base else ""
+    obrigatorias = {o for o in [principal] + _SINONIMOS.get(principal, []) if len(o) >= 3}
+
+    def _casa_obrig(alvo, tokens):
+        return any(_match_palavra(o, tokens, alvo) >= 0.85 for o in obrigatorias)
+
     if tipo == "material":
         where = " OR ".join(
             ["LOWER(nome_pdm || ' ' || descricao) LIKE ?" for _ in termos]
@@ -383,6 +417,9 @@ def _buscar_no_cache(tipo: str, query: str, descricao: str,
             like_params,
         ).fetchall()
         for cod, nome_pdm, desc in rows:
+            alvo = _norm(f"{nome_pdm} {desc}"); tokens = alvo.split()
+            if obrigatorias and not _casa_obrig(alvo, tokens):
+                continue
             score = _calcular_score(query_norm, palavras_q, f"{nome_pdm} {desc}")
             if score >= _LIMIAR:
                 resultados.append(_montar_resultado_material(cod, nome_pdm, desc, score))
@@ -396,6 +433,9 @@ def _buscar_no_cache(tipo: str, query: str, descricao: str,
             like_params,
         ).fetchall()
         for cod, nome_srv, nome_cls, nome_grp in rows:
+            alvo = _norm(f"{nome_srv} {nome_cls} {nome_grp}"); tokens = alvo.split()
+            if obrigatorias and not _casa_obrig(alvo, tokens):
+                continue
             score = _calcular_score(query_norm, palavras_q,
                                     f"{nome_srv} {nome_cls} {nome_grp}")
             if score >= _LIMIAR:

@@ -235,43 +235,70 @@ async function buscarEmpresas() {
   document.getElementById('resultados-wrapper').classList.add('hidden');
 
   const item = ESTADO.itemSelecionado;
-  const controller = new AbortController();
-  const timeoutId  = setTimeout(() => controller.abort(), 45000);
+  const corpo = {
+    nome_item:   item.descricao,
+    codigo_cat:  item.codigo,
+    tipo_cat:    item.tipo,
+    cidade,
+    estado,
+    raio_km:     ESTADO.raioKm,
+    tipo_busca:  ESTADO.tipoBusca,
+    fontes:      fonte,
+    maps_key:    mapsKey,
+  };
+
+  // Busca com tempo generoso (o backend já limita cada fonte internamente, então
+  // o total é controlado). Se mesmo assim estourar, tenta MAIS UMA VEZ antes de
+  // desistir — buscas pesadas às vezes precisam de um 2º ciclo (cache aquecido).
+  const TEMPO_MAX = 90000;      // 90s por tentativa
+  const MAX_TENTATIVAS = 2;
+
+  function _loadingTxt(txt) {
+    const el = document.getElementById('loading-emp-text');
+    if (el) el.textContent = txt;
+  }
 
   try {
-    const resp = await fetch(`${API}/api/empresas/buscar`, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        nome_item:   item.descricao,
-        codigo_cat:  item.codigo,
-        tipo_cat:    item.tipo,
-        cidade,
-        estado,
-        raio_km:     ESTADO.raioKm,
-        tipo_busca:  ESTADO.tipoBusca,
-        fontes:      fonte,
-        maps_key:    mapsKey,
-      }),
-    });
-    clearTimeout(timeoutId);
-
-    if (!resp.ok) {
-      const err    = await resp.json().catch(() => ({}));
-      const detail = (err.detail || '').toLowerCase();
-      if (detail.includes('api key') || detail.includes('chave') || detail.includes('configurada')) {
-        toast('❌ Google Maps API Key inválida. Verifique em ⚙️ Configurações.', 'error');
-        abrirModalConfig();
-      } else if (detail.includes('não encontrada') || detail.includes('cidade')) {
-        toast(`❌ Cidade "${cidade}" não encontrada. Verifique o nome e o estado.`, 'error');
-      } else {
-        toast(`Erro: ${err.detail || 'Falha ao buscar empresas.'}`, 'error');
+    let data = null;
+    for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
+      if (tentativa > 1) {
+        _loadingTxt('A busca foi grande e demorou — tentando novamente (pode levar um pouco)...');
       }
-      return;
+      const controller = new AbortController();
+      const timeoutId  = setTimeout(() => controller.abort(), TEMPO_MAX);
+      try {
+        const resp = await fetch(`${API}/api/empresas/buscar`, {
+          method: 'POST',
+          signal: controller.signal,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(corpo),
+        });
+        clearTimeout(timeoutId);
+
+        if (!resp.ok) {
+          const err    = await resp.json().catch(() => ({}));
+          const detail = (err.detail || '').toLowerCase();
+          if (detail.includes('api key') || detail.includes('chave') || detail.includes('configurada')) {
+            toast('❌ Google Maps API Key inválida. Verifique em ⚙️ Configurações.', 'error');
+            abrirModalConfig();
+          } else if (detail.includes('não encontrada') || detail.includes('cidade')) {
+            toast(`❌ Cidade "${cidade}" não encontrada. Verifique o nome e o estado.`, 'error');
+          } else {
+            toast(`Erro: ${err.detail || 'Falha ao buscar empresas.'}`, 'error');
+          }
+          return;
+        }
+        data = await resp.json();
+        break;  // sucesso
+      } catch (e) {
+        clearTimeout(timeoutId);
+        if (e.name === 'AbortError' && tentativa < MAX_TENTATIVAS) {
+          continue;  // tempo estourou → tenta de novo (próximo ciclo)
+        }
+        throw e;    // esgotou tentativas (ou erro diferente) → trata abaixo
+      }
     }
 
-    const data = await resp.json();
     ESTADO.empresas     = data.empresas || [];
     ESTADO.fontesUsadas = data.fontes_usadas || [];
     ESTADO.dadosBusca   = { cidade, estado, raio: ESTADO.raioKm, tipo_busca: ESTADO.tipoBusca, fonte };
@@ -283,14 +310,14 @@ async function buscarEmpresas() {
     renderizarEmpresas(ESTADO.empresas, cidade, ESTADO.raioKm);
 
   } catch (e) {
-    clearTimeout(timeoutId);
     if (e.name === 'AbortError') {
-      toast('⏱️ Tempo limite (45s) excedido. Verifique sua conexão.', 'error');
+      toast('⏱️ A busca demorou mais que o esperado. Tente um raio menor ou tente de novo em instantes.', 'error');
     } else {
       toast(`Erro: ${e.message}`, 'error');
     }
     console.error(e);
   } finally {
+    _loadingTxt('Buscando empresas na região...');
     mostrarLoading('loading-emp', false);
     document.getElementById('resultados-wrapper').classList.remove('hidden');
   }

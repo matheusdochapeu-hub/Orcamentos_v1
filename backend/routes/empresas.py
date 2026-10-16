@@ -82,15 +82,23 @@ async def buscar_empresas(req: BuscaEmpresasRequest):
     # Enriquecimento via OpenStreetMap: completa telefone/site/horário das
     # empresas (Receita/PNCP) cruzando por nome + proximidade. Grátis, sem chave;
     # degrada em silêncio.
+    import asyncio
     try:
         from services.empresas.osm import enriquecer as enriquecer_osm, OSM_ENABLED
         if OSM_ENABLED:
-            resultado["empresas"] = await enriquecer_osm(
-                resultado["empresas"],
-                cidade=req.cidade.strip(),
-                estado=(req.estado or "").strip(),
-                raio_km=req.raio_km,
+            # Limite próprio: o enriquecimento é um "extra"; se demorar, segue
+            # sem ele (não pode atrasar a resposta ao usuário).
+            resultado["empresas"] = await asyncio.wait_for(
+                enriquecer_osm(
+                    resultado["empresas"],
+                    cidade=req.cidade.strip(),
+                    estado=(req.estado or "").strip(),
+                    raio_km=req.raio_km,
+                ),
+                timeout=18.0,
             )
+    except asyncio.TimeoutError:
+        print("[OSM enriquecer] tempo excedido — seguindo sem enriquecimento")
     except Exception as e:
         print(f"[OSM enriquecer] ignorado: {e}")
 
@@ -106,7 +114,9 @@ async def buscar_empresas(req: BuscaEmpresasRequest):
     try:
         from services.sancoes import marcar_sancoes, habilitado
         if habilitado():
-            empresas = await marcar_sancoes(empresas)
+            empresas = await asyncio.wait_for(marcar_sancoes(empresas), timeout=15.0)
+    except asyncio.TimeoutError:
+        print("[Sancoes] tempo excedido — seguindo sem verificação de sanções")
     except Exception as e:
         print(f"[Sancoes] ignorado: {e}")
 
