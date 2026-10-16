@@ -88,21 +88,39 @@ async def buscar_empresas_agregado(
         # fallback garantido: Receita sempre está disponível
         ativos = ["receita"]
 
-    tarefas = [
-        _PROVEDORES[nome].buscar(
-            nome_item=nome_item,
-            codigo_cat=codigo_cat,
-            tipo_cat=tipo_cat,
-            tipo_busca=tipo_busca,
-            cidade=cidade,
-            estado=estado,
-            raio_km=raio_km,
-            max_empresas=max_empresas,
-            descricao=descricao,
-        )
-        for nome in ativos
-    ]
-    resultados = await asyncio.gather(*tarefas, return_exceptions=True)
+    # ORÇAMENTO DE TEMPO POR FONTE (segundos). Cada fonte tem natureza/velocidade
+    # diferente — damos a cada uma seu próprio limite para que UMA fonte lenta
+    # não derrube a busca inteira. Se uma estourar o tempo, seguimos com o que as
+    # outras já trouxeram (degradação graciosa).
+    _ORCAMENTO = {
+        "receita": 32.0,   # fonte principal (base CNPJ) — mais tempo
+        "pncp": 22.0,      # histórico de contratações
+        "geoapify": 15.0,  # rápido (API dedicada)
+        "osm": 22.0,       # Overpass pode ser pesado
+        "google": 20.0,
+    }
+
+    async def _rodar(nome: str):
+        prov = _PROVEDORES[nome]
+        try:
+            return await asyncio.wait_for(
+                prov.buscar(
+                    nome_item=nome_item,
+                    codigo_cat=codigo_cat,
+                    tipo_cat=tipo_cat,
+                    tipo_busca=tipo_busca,
+                    cidade=cidade,
+                    estado=estado,
+                    raio_km=raio_km,
+                    max_empresas=max_empresas,
+                    descricao=descricao,
+                ),
+                timeout=_ORCAMENTO.get(nome, 20.0),
+            )
+        except asyncio.TimeoutError:
+            return TimeoutError(f"fonte '{nome}' excedeu o tempo e foi ignorada")
+
+    resultados = await asyncio.gather(*[_rodar(n) for n in ativos], return_exceptions=True)
 
     combinadas: list[dict] = []
     por_chave: dict[str, dict] = {}
