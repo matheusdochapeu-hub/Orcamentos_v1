@@ -25,6 +25,10 @@ document.addEventListener('DOMContentLoaded', () => {
   aplicarModoEmbed();
   // SP já vem selecionado → carrega os municípios de SP de cara
   aoMudarEstado();
+  // Revalida o formulário de empresas conforme o usuário digita a cidade
+  const cidadeInput = document.getElementById('cidade-input');
+  if (cidadeInput) cidadeInput.addEventListener('input', validarFormEmpresas);
+  validarFormEmpresas();
 });
 
 // Modo "ferramenta interna": quando embutido em iframe (?embed=1 ou dentro de
@@ -68,6 +72,38 @@ async function aoMudarEstado() {
   } catch (e) {
     if (hint) hint.textContent = 'Não foi possível carregar a lista; digite o nome da cidade manualmente.';
   }
+  validarFormEmpresas();
+}
+
+// Valida o formulário de busca de empresas ANTES de permitir buscar.
+// Desabilita o botão e explica o que falta, para o usuário não disparar uma
+// busca longa só para descobrir no fim que faltou preencher um campo.
+function validarFormEmpresas() {
+  const estado = (document.getElementById('estado-input')?.value || '').trim();
+  const cidade = (document.getElementById('cidade-input')?.value || '').trim();
+  const btn = document.getElementById('btn-buscar-emp');
+  const aviso = document.getElementById('form-emp-aviso');
+  if (!btn) return true;
+
+  const faltando = [];
+  if (!estado) faltando.push('estado');
+  if (!cidade) faltando.push('cidade');
+
+  const ok = faltando.length === 0;
+  btn.disabled = !ok;   // visual via .btn:disabled no CSS
+  if (aviso) {
+    if (ok) {
+      aviso.textContent = '';
+      aviso.classList.add('hidden');
+    } else {
+      const faltaTxt = faltando.length === 2
+        ? 'o estado e a cidade'
+        : (faltando[0] === 'estado' ? 'o estado' : 'a cidade');
+      aviso.textContent = `⚠️ Selecione ${faltaTxt} para buscar.`;
+      aviso.classList.remove('hidden');
+    }
+  }
+  return ok;
 }
 
 // Registra o Service Worker (PWA — permite instalar como app e abrir rápido)
@@ -267,10 +303,13 @@ function selecionarTipoBusca(tipo) {
 
 async function buscarEmpresas() {
   const cidade = document.getElementById('cidade-input').value.trim();
-  const estado = document.getElementById('estado-input').value;
+  const estado = document.getElementById('estado-input').value.trim();
 
-  if (!estado) { toast('Escolha o estado', 'warn'); return; }
-  if (!cidade) { toast('Informe a cidade', 'warn'); return; }
+  // Rede de segurança: não inicia a busca se faltarem dados obrigatórios.
+  // (O botão já fica desabilitado; isto cobre chamadas por teclado/Enter.)
+  if (!estado && !cidade) { toast('Selecione o estado e a cidade antes de buscar', 'warn'); validarFormEmpresas(); return; }
+  if (!estado) { toast('Selecione o estado antes de buscar', 'warn'); validarFormEmpresas(); return; }
+  if (!cidade) { toast('Informe a cidade antes de buscar', 'warn'); validarFormEmpresas(); return; }
 
   // Busca em TODAS as fontes disponíveis automaticamente. A chave do Google é
   // opcional: se existir, entra na busca; se não, o backend usa só o que puder.

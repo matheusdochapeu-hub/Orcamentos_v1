@@ -333,6 +333,20 @@ textarea { resize: vertical; min-height: 80px; }
 .btn-danger:hover { background: #93351F; }
 .btn:disabled  { opacity: .5; cursor: not-allowed; pointer-events: none; }
 
+/* Aviso de campo obrigatório faltando (bloqueia a busca de empresas) */
+.form-aviso {
+  display: block;
+  margin-top: 14px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: #FCEFD6;
+  border: 1px solid #E3C98A;
+  color: #7A5A14;
+  font-size: .82rem;
+  font-weight: 600;
+}
+.form-aviso.hidden { display: none; }
+
 /* ── Lista de resultados CATMAT/CATSER ── */
 .resultado-list { display: flex; flex-direction: column; gap: 10px; }
 
@@ -629,6 +643,14 @@ textarea { resize: vertical; min-height: 80px; }
 .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
 .modal-header h2 { font-family: var(--fonte-titulo); font-size: 1.2rem; font-weight: 700; color: var(--azul-escuro); }
 .modal-close { font-size: 1.4rem; cursor: pointer; color: var(--texto-leve); border: none; background: none; }
+/* Barra de ações no topo do modal (fica logo abaixo do cabeçalho) */
+.modal-acoes {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--cinza-borda);
+}
 
 .busca-salva-item {
   border: 1.5px solid var(--cinza-borda);
