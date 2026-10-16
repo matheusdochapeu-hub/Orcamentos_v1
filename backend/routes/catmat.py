@@ -34,7 +34,7 @@ async def buscar_cat(req: BuscaCatRequest):
             tipo=tipo,
             query=req.query.strip(),
             descricao=req.descricao or "",
-            max_resultados=10,
+            max_resultados=25,
         )
     except Exception as e:
         raise HTTPException(502, f"Erro ao consultar API do governo: {str(e)}")
