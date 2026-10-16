@@ -41,6 +41,10 @@ CACHE_DB = db_path("catmat_cache.db")
 PAGINAS_CATMAT = 50
 PAGINAS_CATSER = 30
 
+# Limiar mínimo de relevância para um item entrar nos resultados. Baixo de
+# propósito (busca abrangente/tolerante) — o ranqueamento ordena os melhores.
+_LIMIAR = 0.12
+
 
 # ─── Utilidades ───────────────────────────────────────────────────────────────
 
@@ -51,29 +55,100 @@ def _norm(texto: str) -> str:
     return re.sub(r"\s+", " ", t).strip()
 
 
-def _palavras(texto: str) -> list[str]:
-    """Extrai palavras relevantes (sem stopwords, mín. 3 chars)."""
+# Sinônimos / termos equivalentes comuns em compras públicas. Cada palavra da
+# query é EXPANDIDA para incluir seus sinônimos, aumentando a chance de casar
+# com a descrição oficial do catálogo (que usa termos técnicos).
+_SINONIMOS = {
+    "computador": ["microcomputador", "cpu", "desktop", "pc"],
+    "notebook": ["laptop", "portatil", "notebook"],
+    "impressora": ["impressora", "multifuncional", "jato", "laser"],
+    "cartucho": ["cartucho", "toner", "tinta"],
+    "caneta": ["caneta", "esferografica"],
+    "papel": ["papel", "sulfite", "resma", "a4"],
+    "armario": ["armario", "roupeiro"],
+    "cadeira": ["cadeira", "poltrona", "assento"],
+    "mesa": ["mesa", "escrivaninha", "bancada"],
+    "estofado": ["estofado", "sofa", "poltrona"],
+    "geladeira": ["geladeira", "refrigerador"],
+    "ar": ["ar", "condicionado", "climatizador", "split"],
+    "ventilador": ["ventilador", "circulador"],
+    "veiculo": ["veiculo", "automovel", "carro", "viatura"],
+    "pneu": ["pneu", "pneumatico"],
+    "combustivel": ["combustivel", "gasolina", "diesel", "etanol", "alcool"],
+    "remedio": ["medicamento", "farmaco", "remedio"],
+    "medicamento": ["medicamento", "farmaco", "remedio"],
+    "luva": ["luva", "procedimento", "cirurgica"],
+    "mascara": ["mascara", "respiratoria", "cirurgica"],
+    "limpeza": ["limpeza", "higiene", "detergente", "desinfetante", "saneante"],
+    "uniforme": ["uniforme", "vestuario", "fardamento"],
+    "notebook ": ["laptop"],
+    "lampada": ["lampada", "led", "luminaria"],
+    "merenda": ["merenda", "alimento", "alimenticio", "genero"],
+    "agua": ["agua", "mineral", "potavel"],
+    "livro": ["livro", "didatico", "literario", "obra"],
+}
+
+
+def _palavras(texto: str, expandir: bool = False) -> list[str]:
+    """
+    Extrai palavras relevantes (sem stopwords, mín. 3 chars).
+    Se expandir=True, acrescenta sinônimos de cada palavra (para a busca ficar
+    mais abrangente — tolera o usuário usar termo coloquial em vez do técnico).
+    """
     stop = {"de","da","do","dos","das","para","com","por","em",
-            "um","uma","nos","nas","que","ao","os","as","e","a","o","se","na","no"}
-    return [p for p in _norm(texto).split() if len(p) >= 3 and p not in stop]
+            "um","uma","nos","nas","que","ao","os","as","e","a","o","se","na","no",
+            "tipo","modelo","marca","cor","tamanho"}
+    base = [p for p in _norm(texto).split() if len(p) >= 3 and p not in stop]
+    if not expandir:
+        return base
+    expandido = list(base)
+    for p in base:
+        for syn in _SINONIMOS.get(p, []):
+            if syn not in expandido:
+                expandido.append(syn)
+    return expandido
+
+
+def _match_palavra(palavra: str, tokens_item: list[str], texto_item: str) -> float:
+    """
+    Mede o quão bem UMA palavra da query casa com o item (0.0 a 1.0),
+    de forma TOLERANTE a erros de digitação/plural:
+      1.0  → palavra aparece literal no texto (substring)
+      0.9  → casa por radical com algum token (prefixo de 4+ letras)
+      0..1 → melhor similaridade fuzzy (Levenshtein) com algum token do item,
+             contando só se ficar razoavelmente parecida (>= 0.78)
+    """
+    if palavra in texto_item:
+        return 1.0
+    melhor = 0.0
+    radical = palavra[:4]
+    for tok in tokens_item:
+        if len(palavra) >= 4 and len(tok) >= 4 and (tok.startswith(radical) or palavra.startswith(tok[:4])):
+            melhor = max(melhor, 0.9)
+            continue
+        r = lev_ratio(palavra, tok)
+        if r >= 0.78:                      # tolera ~1-2 letras trocadas
+            melhor = max(melhor, r)
+    return melhor
 
 
 def _calcular_score(query_norm: str, palavras_query: list[str],
                     texto_item: str) -> float:
     """
-    Score de relevância (0.0 a 1.0). Combina:
-      - cobertura: proporção de palavras da query presentes no item (peso 65%)
-      - frente:    bônus se o item COMEÇA com a 1ª palavra da query (peso 10%)
-      - sequência: similaridade de sequência query × item (peso 25%)
+    Score de relevância (0.0 a 1.0), TOLERANTE a erros. Combina:
+      - cobertura: soma dos matches (fuzzy) das palavras da query / nº palavras (70%)
+      - frente:    bônus se o item COMEÇA com a 1ª palavra da query (10%)
+      - sequência: similaridade de sequência query × item (20%)
     """
     if not palavras_query:
         return 0.0
     alvo = _norm(texto_item)
-    hits = sum(1 for p in palavras_query if p in alvo)
-    s_cov = hits / len(palavras_query)
+    tokens_item = alvo.split()
+    soma = sum(_match_palavra(p, tokens_item, alvo) for p in palavras_query)
+    s_cov = soma / len(palavras_query)
     s_front = 1.0 if alvo.startswith(palavras_query[0]) else 0.0
     s_seq = lev_ratio(query_norm[:60], alvo[:60])
-    return round(s_cov * 0.65 + s_front * 0.10 + s_seq * 0.25, 4)
+    return round(s_cov * 0.70 + s_front * 0.10 + s_seq * 0.20, 4)
 
 
 def _montar_resultado_material(cod, nome_pdm, desc, score) -> dict:
@@ -114,11 +189,14 @@ async def _buscar_online(tipo: str, texto_busca: str,
     então usa o cache como fallback).
     """
     query_norm = _norm(texto_busca)
-    palavras_q = _palavras(texto_busca)
+    palavras_q = _palavras(texto_busca, expandir=True)   # com sinônimos
+    palavras_base = _palavras(texto_busca)               # sem sinônimos (p/ termo da API)
     if not palavras_q:
         return []
 
-    termo = " ".join(palavras_q[:6])
+    # Termo enviado à API: usa as palavras originais (sem sinônimos, p/ não
+    # confundir o filtro do governo). O ranqueamento local é que usa sinônimos.
+    termo = " ".join(palavras_base[:6])
 
     if tipo == "material":
         endpoint = f"{BASE_API}/modulo-material/4_consultarItemMaterial"
@@ -151,7 +229,7 @@ async def _buscar_online(tipo: str, texto_busca: str,
                         desc = item.get("descricaoItem", "") or ""
                         score = _calcular_score(query_norm, palavras_q,
                                                 f"{nome_pdm} {desc}")
-                        if score >= 0.05:
+                        if score >= _LIMIAR:
                             resultados.append(
                                 _montar_resultado_material(cod, nome_pdm, desc, score)
                             )
@@ -162,7 +240,7 @@ async def _buscar_online(tipo: str, texto_busca: str,
                         nome_grp = item.get("nomeGrupo", "") or ""
                         score = _calcular_score(query_norm, palavras_q,
                                                 f"{nome_srv} {nome_cls} {nome_grp}")
-                        if score >= 0.05:
+                        if score >= _LIMIAR:
                             resultados.append(
                                 _montar_resultado_servico(cod, nome_srv, nome_cls,
                                                           nome_grp, score)
@@ -275,26 +353,38 @@ def _buscar_no_cache(tipo: str, query: str, descricao: str,
     """Aplica nosso filtro de similaridade sobre o cache local (SQL parametrizado)."""
     texto_busca = f"{query} {descricao}".strip()
     query_norm = _norm(texto_busca)
-    palavras_q = _palavras(texto_busca)
+    palavras_q = _palavras(texto_busca, expandir=True)   # ranqueamento c/ sinônimos
     if not palavras_q:
         return []
 
     con = sqlite3.connect(CACHE_DB)
     resultados: list[dict] = []
-    termos = palavras_q[:4]
-    like_params = [f"%{p}%" for p in termos]
+    # Pré-filtro SQL amplo: usa as palavras E seus RADICAIS (4 letras) e
+    # sinônimos, com LIKE, só para reduzir o conjunto; o recorte fino é no score.
+    radicais = []
+    for p in palavras_q[:8]:
+        radicais.append(p)
+        if len(p) >= 5:
+            radicais.append(p[:4])   # pega plural/variação (ex.: "cadeir" de "cadeiras")
+    # dedup preservando ordem
+    vistos = set(); termos = []
+    for t in radicais:
+        if t not in vistos:
+            vistos.add(t); termos.append(t)
+    termos = termos[:10]
+    like_params = [f"%{t}%" for t in termos]
 
     if tipo == "material":
         where = " OR ".join(
             ["LOWER(nome_pdm || ' ' || descricao) LIKE ?" for _ in termos]
         ) or "1=1"
         rows = con.execute(
-            f"SELECT codigo, nome_pdm, descricao FROM catmat WHERE {where} LIMIT 500",
+            f"SELECT codigo, nome_pdm, descricao FROM catmat WHERE {where} LIMIT 1500",
             like_params,
         ).fetchall()
         for cod, nome_pdm, desc in rows:
             score = _calcular_score(query_norm, palavras_q, f"{nome_pdm} {desc}")
-            if score >= 0.05:
+            if score >= _LIMIAR:
                 resultados.append(_montar_resultado_material(cod, nome_pdm, desc, score))
     else:
         where = " OR ".join(
@@ -302,13 +392,13 @@ def _buscar_no_cache(tipo: str, query: str, descricao: str,
              for _ in termos]
         ) or "1=1"
         rows = con.execute(
-            f"SELECT codigo, nome_servico, nome_classe, nome_grupo FROM catser WHERE {where} LIMIT 500",
+            f"SELECT codigo, nome_servico, nome_classe, nome_grupo FROM catser WHERE {where} LIMIT 1500",
             like_params,
         ).fetchall()
         for cod, nome_srv, nome_cls, nome_grp in rows:
             score = _calcular_score(query_norm, palavras_q,
                                     f"{nome_srv} {nome_cls} {nome_grp}")
-            if score >= 0.05:
+            if score >= _LIMIAR:
                 resultados.append(
                     _montar_resultado_servico(cod, nome_srv, nome_cls, nome_grp, score)
                 )
