@@ -66,6 +66,26 @@ if frontend_path.exists():
     async def root():
         return FileResponse(str(frontend_path / "index.html"))
 
+    # ── PWA: service worker e manifest servidos da RAIZ, com os tipos/headers
+    #    corretos (necessário para instalar e funcionar offline). ──────────────
+    @app.get("/sw.js")
+    async def service_worker():
+        return FileResponse(
+            str(frontend_path / "sw.js"),
+            media_type="application/javascript",
+            headers={
+                "Service-Worker-Allowed": "/",
+                "Cache-Control": "no-cache",  # SW sempre revalida
+            },
+        )
+
+    @app.get("/manifest.webmanifest")
+    async def manifest():
+        return FileResponse(
+            str(frontend_path / "manifest.webmanifest"),
+            media_type="application/manifest+json",
+        )
+
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         """Serve arquivos estaticos ou retorna index.html para o SPA."""

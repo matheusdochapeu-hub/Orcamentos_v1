@@ -2,10 +2,19 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Sistema de Orçamentos Públicos</title>
   <link rel="stylesheet" href="/static/css/style.css" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>" />
+
+  <!-- PWA (instalável como app) -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#0F2E4D" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Orçamentos" />
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png" />
 </head>
 <body>
 
@@ -304,18 +313,12 @@
       </small>
     </div>
 
-    <div class="config-row">
+    <div class="config-row" style="background:#eef6ff;border-color:#bfdbfe">
       <span>🧭</span>
-      <label>Geoapify API Key <small style="color:var(--texto-leve);font-weight:400">(opcional, grátis)</small></label>
-    </div>
-    <div class="form-group">
-      <input type="password" id="config-geoapify-key" placeholder="chave Geoapify (sem cartão de crédito)" />
-      <small style="color:var(--texto-leve);font-size:.78rem">
-        Alternativa ao Google <strong>grátis e sem cartão de crédito</strong> (3.000 buscas/dia).
-        Melhora a descoberta de estabelecimentos por categoria. Crie uma conta grátis e gere a
-        chave em
-        <a href="https://myprojects.geoapify.com/register" target="_blank">myprojects.geoapify.com</a>.
-      </small>
+      <label style="font-weight:400;font-size:.82rem;color:var(--texto)">
+        A busca por estabelecimentos em mapa (OpenStreetMap/Geoapify) já vem
+        <strong>ativada por padrão</strong> — você não precisa configurar nada.
+      </label>
     </div>
 
     <div class="flex gap-8 mt-16">
