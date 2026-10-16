@@ -22,7 +22,53 @@ document.addEventListener('DOMContentLoaded', () => {
   // Marca o raio padrão como selecionado
   selecionarRaio(10);
   registrarPWA();
+  aplicarModoEmbed();
+  // SP já vem selecionado → carrega os municípios de SP de cara
+  aoMudarEstado();
 });
+
+// Modo "ferramenta interna": quando embutido em iframe (?embed=1 ou dentro de
+// outro site), esconde o cabeçalho grande para integrar melhor ao portal.
+function aplicarModoEmbed() {
+  const params = new URLSearchParams(window.location.search);
+  const emIframe = window.self !== window.top;
+  const pedidoEmbed = params.get('embed') === '1' || params.get('embed') === 'true';
+  if (pedidoEmbed || emIframe) {
+    document.body.classList.add('embed');
+  }
+}
+
+// ── Municípios por estado (autocomplete da cidade) ───────────
+const _CACHE_MUN = {};  // uf -> [nomes]
+
+async function aoMudarEstado() {
+  const uf = (document.getElementById('estado-input')?.value || '').trim();
+  const datalist = document.getElementById('lista-municipios');
+  const hint = document.getElementById('cidade-hint');
+  const cidadeInput = document.getElementById('cidade-input');
+  if (!datalist) return;
+
+  datalist.innerHTML = '';
+  if (cidadeInput) cidadeInput.value = '';
+  if (!uf) { if (hint) hint.textContent = 'Escolha o estado para listar as cidades.'; return; }
+
+  if (hint) hint.textContent = 'Carregando cidades...';
+  try {
+    let nomes = _CACHE_MUN[uf];
+    if (!nomes) {
+      const resp = await fetch(`${API}/api/localidades/municipios/${uf}`);
+      const data = await resp.json();
+      nomes = data.municipios || [];
+      _CACHE_MUN[uf] = nomes;
+    }
+    datalist.innerHTML = nomes.map(n => `<option value="${escapeHtml(n)}"></option>`).join('');
+    if (hint) hint.textContent = nomes.length
+      ? `${nomes.length} cidades em ${uf} — digite para filtrar.`
+      : 'Não foi possível carregar a lista; você pode digitar o nome mesmo assim.';
+  } catch (e) {
+    if (hint) hint.textContent = 'Não foi possível carregar a lista; digite o nome da cidade manualmente.';
+  }
+}
 
 // Registra o Service Worker (PWA — permite instalar como app e abrir rápido)
 function registrarPWA() {
@@ -223,6 +269,7 @@ async function buscarEmpresas() {
   const cidade = document.getElementById('cidade-input').value.trim();
   const estado = document.getElementById('estado-input').value;
 
+  if (!estado) { toast('Escolha o estado', 'warn'); return; }
   if (!cidade) { toast('Informe a cidade', 'warn'); return; }
 
   // Busca em TODAS as fontes disponíveis automaticamente. A chave do Google é

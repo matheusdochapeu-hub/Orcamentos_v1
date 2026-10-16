@@ -284,3 +284,30 @@ A busca de estabelecimentos em mapa (Geoapify) usa uma **chave fixa configurada
 no servidor** (variável `GEOAPIFY_API_KEY`). Ela vale para todos os usuários,
 que **não a veem nem precisam configurar nada**. No Render, defina em
 *Environment → GEOAPIFY_API_KEY*.
+
+---
+
+## Vincular como ferramenta interna (embed no Portal Gestor Público)
+
+O app pode ser **embutido** em outro site (ex.: Portal Gestor Público) via iframe:
+
+```html
+<iframe
+  src="https://SEU-APP.onrender.com/?embed=1"
+  style="width:100%;height:900px;border:0"
+  title="Orçamentos Públicos"></iframe>
+```
+
+- O parâmetro **`?embed=1`** ativa o *modo ferramenta interna*: o cabeçalho
+  grande some, para o app se integrar ao visual do portal (ele também detecta
+  automaticamente quando está dentro de um iframe).
+- O backend libera o embed via cabeçalho `Content-Security-Policy: frame-ancestors`.
+  Os domínios autorizados ficam na variável **`EMBED_ANCESTORS`** (padrão já
+  inclui `portalgestorpublico.com.br`). Ajuste no Render se o domínio for outro.
+
+## Seleção de cidade (IBGE)
+
+Na etapa de localização, escolha o **Estado** primeiro (SP vem no topo) e a lista
+de **municípios** daquele estado é carregada automaticamente (API de Localidades
+do IBGE, com cache). O campo de cidade tem **autocomplete**: conforme você digita,
+a lista vai sendo filtrada — mas você também pode escrever o nome livremente.

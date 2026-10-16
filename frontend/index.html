@@ -176,23 +176,48 @@
     <div class="card">
       <div class="card-title"><span class="icon">📍</span> Localização e raio de busca</div>
 
+      <!-- Estado primeiro (SP no topo); ao escolher, carrega os municípios -->
       <div class="form-group">
-        <label for="cidade-input">Cidade *</label>
-        <input type="text" id="cidade-input" placeholder="Ex: Brasília, São Paulo, Belo Horizonte..." />
+        <label for="estado-input">Estado *</label>
+        <select id="estado-input" onchange="aoMudarEstado()">
+          <option value="SP" selected>SP — São Paulo</option>
+          <option value="">— Selecione o estado —</option>
+          <option value="AC">AC — Acre</option>
+          <option value="AL">AL — Alagoas</option>
+          <option value="AP">AP — Amapá</option>
+          <option value="AM">AM — Amazonas</option>
+          <option value="BA">BA — Bahia</option>
+          <option value="CE">CE — Ceará</option>
+          <option value="DF">DF — Distrito Federal</option>
+          <option value="ES">ES — Espírito Santo</option>
+          <option value="GO">GO — Goiás</option>
+          <option value="MA">MA — Maranhão</option>
+          <option value="MT">MT — Mato Grosso</option>
+          <option value="MS">MS — Mato Grosso do Sul</option>
+          <option value="MG">MG — Minas Gerais</option>
+          <option value="PA">PA — Pará</option>
+          <option value="PB">PB — Paraíba</option>
+          <option value="PR">PR — Paraná</option>
+          <option value="PE">PE — Pernambuco</option>
+          <option value="PI">PI — Piauí</option>
+          <option value="RJ">RJ — Rio de Janeiro</option>
+          <option value="RN">RN — Rio Grande do Norte</option>
+          <option value="RS">RS — Rio Grande do Sul</option>
+          <option value="RO">RO — Rondônia</option>
+          <option value="RR">RR — Roraima</option>
+          <option value="SC">SC — Santa Catarina</option>
+          <option value="SE">SE — Sergipe</option>
+          <option value="TO">TO — Tocantins</option>
+        </select>
       </div>
 
+      <!-- Cidade com autocomplete: digita e a lista vai filtrando (datalist) -->
       <div class="form-group">
-        <label for="estado-input">Estado (opcional)</label>
-        <select id="estado-input">
-          <option value="">— Selecione —</option>
-          <option>AC</option><option>AL</option><option>AP</option><option>AM</option>
-          <option>BA</option><option>CE</option><option>DF</option><option>ES</option>
-          <option>GO</option><option>MA</option><option>MT</option><option>MS</option>
-          <option>MG</option><option>PA</option><option>PB</option><option>PR</option>
-          <option>PE</option><option>PI</option><option>RJ</option><option>RN</option>
-          <option>RS</option><option>RO</option><option>RR</option><option>SC</option>
-          <option>SP</option><option>SE</option><option>TO</option>
-        </select>
+        <label for="cidade-input">Cidade *</label>
+        <input type="text" id="cidade-input" list="lista-municipios" autocomplete="off"
+               placeholder="Comece a digitar o nome da cidade..." />
+        <datalist id="lista-municipios"></datalist>
+        <small id="cidade-hint" style="color:var(--texto-leve);font-size:.78rem"></small>
       </div>
 
       <!-- Raio: botões fixos -->
@@ -246,10 +271,10 @@
       <!-- Resumo + Ações -->
       <div class="card" style="padding:20px 28px">
         <div class="acoes-bar">
+          <button class="btn btn-primary" onclick="voltarEtapa(3)">← Nova Busca</button>
           <button class="btn btn-success" onclick="exportar('excel')">📊 Exportar Excel</button>
           <button class="btn btn-warning" onclick="exportar('pdf')">📄 Exportar PDF</button>
-          <button class="btn btn-primary" onclick="salvarBusca()">💾 Salvar Busca</button>
-          <button class="btn btn-outline" onclick="voltarEtapa(3)">← Nova Busca</button>
+          <button class="btn btn-outline" onclick="salvarBusca()">💾 Salvar Busca</button>
           <div class="resultados-info" id="resultados-info"></div>
         </div>
 

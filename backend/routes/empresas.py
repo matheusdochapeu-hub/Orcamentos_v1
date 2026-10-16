@@ -71,7 +71,7 @@ async def buscar_empresas(req: BuscaEmpresasRequest):
             cidade=req.cidade.strip(),
             estado=(req.estado or "").strip(),
             raio_km=req.raio_km,
-            fontes=req.fontes or "receita",
+            fontes=req.fontes or "ambas",
             max_empresas=50,
         )
     except ValueError as e:

@@ -19,6 +19,7 @@ from routes.catmat import router as catmat_router
 from routes.empresas import router as empresas_router
 from routes.buscas import router as buscas_router
 from routes.export import router as export_router
+from routes.localidades import router as localidades_router
 
 
 @asynccontextmanager
@@ -46,6 +47,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Permitir EMBED (iframe) no Portal Gestor Público ─────────────────────────
+# Para vincular este app como "ferramenta interna" de um site, o navegador só
+# deixa embutir em iframe se o cabeçalho frame-ancestors permitir aquele domínio.
+# Configure EMBED_ANCESTORS no .env com os domínios autorizados (separados por
+# espaço). Padrão já inclui o Portal Gestor Público. 'self' permite o próprio app.
+_EMBED_ANCESTORS = os.getenv(
+    "EMBED_ANCESTORS",
+    "'self' https://portalgestorpublico.com.br https://*.portalgestorpublico.com.br",
+)
+
+@app.middleware("http")
+async def _permitir_embed(request, call_next):
+    resp = await call_next(request)
+    # frame-ancestors (CSP) é o mecanismo moderno; não enviamos X-Frame-Options
+    # (que não aceita lista de domínios) para não conflitar.
+    resp.headers["Content-Security-Policy"] = f"frame-ancestors {_EMBED_ANCESTORS};"
+    return resp
+
 # Rota de health check (antes do catch-all)
 @app.get("/api/health")
 async def health():
@@ -56,6 +75,7 @@ app.include_router(catmat_router)
 app.include_router(empresas_router)
 app.include_router(buscas_router)
 app.include_router(export_router)
+app.include_router(localidades_router)
 
 # Serve o frontend estatico (DEVE vir depois de todas as rotas de API)
 frontend_path = Path(__file__).parent.parent / "frontend"

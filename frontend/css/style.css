@@ -688,18 +688,49 @@ textarea { resize: vertical; min-height: 80px; }
 
 /* ── Responsivo ── */
 @media (max-width: 640px) {
-  .header { padding: 14px 16px; }
-  .main { padding: 20px 14px 50px; }
-  .card { padding: 20px 16px; }
+  .header { padding: 12px 14px; flex-wrap: wrap; gap: 10px; }
+  .header-logo { width: 40px; height: 40px; font-size: 1.3rem; }
+  .header-text h1 { font-size: 1.12rem; }
+  .header-text p { font-size: .72rem; }
+  .header-actions { width: 100%; justify-content: stretch; gap: 8px; }
+  .header-actions .btn { flex: 1; justify-content: center; padding: 10px 8px; font-size: .82rem; }
+
+  .main { padding: 18px 12px 56px; }
+  .card { padding: 18px 15px; }
+  .card-title { font-size: 1.08rem; }
+
   .tipo-selector { grid-template-columns: 1fr; }
   .busca-tipo-grid { grid-template-columns: 1fr; }
   .busca-modo-grid { grid-template-columns: 1fr; }
-  .acoes-bar { flex-direction: column; align-items: stretch; }
-  .acoes-bar .resultados-info { margin-left: 0; }
-  .stepper { gap: 0; padding: 18px 10px 0; }
-  .step-label { font-size: .68rem; }
-  .header { flex-wrap: wrap; }
-  .header-actions { width: 100%; justify-content: flex-end; }
+
+  /* Botões de ação full-width e empilhados (fáceis de tocar) */
+  .acoes-bar { flex-direction: column; align-items: stretch; gap: 8px; }
+  .acoes-bar .btn { width: 100%; justify-content: center; min-height: 48px; }
+  .acoes-bar .resultados-info { margin-left: 0; text-align: center; order: 99; }
+
+  /* Botões em geral com alvo de toque confortável no celular */
+  .btn { min-height: 46px; }
+
+  /* Inputs 16px evitam zoom automático no iOS */
+  input[type="text"], input[type="number"], textarea, select { font-size: 16px; padding: 12px 14px; }
+
+  .stepper { gap: 0; padding: 16px 6px 0; }
+  .step-circle { width: 38px; height: 38px; font-size: .95rem; }
+  .step-label { font-size: .64rem; }
+
+  /* Resultados de empresa com mais respiro */
+  .empresa-card { padding: 16px; }
+  .empresa-telefone { width: 100%; justify-content: center; }
+
+  /* Raio: botões em grade de 3 colunas no celular */
+  .raio-grid { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .raio-btn { padding: 12px 6px; text-align: center; }
+}
+
+/* Área segura (notch) em celulares */
+@supports (padding: max(0px)) {
+  .header { padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
+  .main { padding-bottom: max(56px, env(safe-area-inset-bottom)); }
 }
 
 /* ── Utilitários ── */
@@ -764,3 +795,7 @@ textarea { resize: vertical; min-height: 80px; }
   .filtros-empresas select { min-width: 0; width: 100%; }
   .filtro-contagem { margin-left: 0; }
 }
+
+/* ── Modo embed (ferramenta interna dentro de outro site) ── */
+body.embed .header { display: none; }     /* o portal já tem seu próprio topo */
+body.embed .main { padding-top: 16px; }
