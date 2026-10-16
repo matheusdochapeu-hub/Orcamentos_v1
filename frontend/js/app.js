@@ -17,12 +17,37 @@ const ESTADO = {
 
 const API = window.location.origin;
 
+// Faz fetch + parse de JSON de forma DEFENSIVA. Se a resposta vier vazia (ex.:
+// o servidor/proxy cortou um request longo e devolveu corpo vazio), em vez de
+// quebrar com "Unexpected end of JSON input" lançamos uma mensagem clara.
+async function fetchJson(url, opcoes) {
+  const resp = await fetch(url, opcoes);
+  const texto = await resp.text();
+  let data = null;
+  if (texto) {
+    try { data = JSON.parse(texto); }
+    catch (_) { /* corpo não-JSON */ }
+  }
+  if (!resp.ok) {
+    const msg = (data && (data.detail || data.mensagem)) ||
+      (resp.status === 502 || resp.status === 504
+        ? 'A consulta demorou demais e foi interrompida. Tente um termo mais específico ou tente de novo em instantes.'
+        : `Erro ${resp.status} ao consultar o servidor.`);
+    const err = new Error(msg); err.status = resp.status; throw err;
+  }
+  if (data === null) {
+    throw new Error('A consulta demorou demais e não retornou dados. Tente novamente ou use um termo mais específico.');
+  }
+  return data;
+}
+
 // ── Inicialização ────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   // Marca o raio padrão como selecionado
   selecionarRaio(10);
   registrarPWA();
   aplicarModoEmbed();
+  configurarBotaoInstalar();
   // SP já vem selecionado → carrega os municípios de SP de cara
   aoMudarEstado();
   // Revalida o formulário de empresas conforme o usuário digita a cidade
@@ -117,6 +142,75 @@ function registrarPWA() {
   }
 }
 
+// ═══════════════════ BOTÃO "BAIXAR APP" (PWA) ════════════════
+// Permite instalar o app no computador ou celular (vira ícone na tela inicial
+// e abre em tela cheia, funcionando como um app nativo — tudo gratuito).
+let _promptInstalar = null;
+
+// Captura o evento JÁ no carregamento do script (ele pode disparar ANTES do
+// DOMContentLoaded). Guarda o prompt e tenta revelar o botão se ele já existir.
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  _promptInstalar = e;
+  const btn = document.getElementById('btn-instalar');
+  if (btn && !document.body.classList.contains('embed')) btn.classList.remove('hidden');
+});
+window.addEventListener('appinstalled', () => {
+  _promptInstalar = null;
+  document.getElementById('btn-instalar')?.classList.add('hidden');
+  if (typeof toast === 'function') toast('App instalado! Procure o ícone na sua tela inicial.', 'info');
+});
+
+function configurarBotaoInstalar() {
+  const btn = document.getElementById('btn-instalar');
+  if (!btn) return;
+
+  // Já instalado / aberto como app: não mostra o botão.
+  const jaInstalado = window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true;
+  if (jaInstalado) { btn.classList.add('hidden'); return; }
+
+  // No modo embed (dentro de outro site) não faz sentido instalar.
+  if (document.body.classList.contains('embed')) { btn.classList.add('hidden'); return; }
+
+  // Se o evento já foi capturado (Android/desktop), revela o botão agora.
+  if (_promptInstalar) { btn.classList.remove('hidden'); return; }
+
+  // iPhone/iPad (Safari não dispara beforeinstallprompt): mostramos o botão
+  // mesmo assim e, ao clicar, explicamos como adicionar à tela inicial.
+  const ehIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if (ehIOS) btn.classList.remove('hidden');
+}
+
+async function instalarApp() {
+  // Caminho padrão (Android/desktop): usa o prompt nativo do navegador.
+  if (_promptInstalar) {
+    _promptInstalar.prompt();
+    try { await _promptInstalar.userChoice; } catch (_) {}
+    _promptInstalar = null;
+    document.getElementById('btn-instalar')?.classList.add('hidden');
+    return;
+  }
+
+  // iOS ou navegador sem suporte ao prompt: instruções passo a passo.
+  const ehIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if (ehIOS) {
+    alert(
+      'Para instalar no iPhone/iPad:\n\n' +
+      '1) Toque no botão Compartilhar (quadrado com seta ↑) na barra do Safari;\n' +
+      '2) Escolha "Adicionar à Tela de Início";\n' +
+      '3) Toque em "Adicionar".\n\n' +
+      'O app vai aparecer como um ícone na sua tela inicial.'
+    );
+  } else {
+    alert(
+      'Para instalar no computador ou celular (Chrome/Edge):\n\n' +
+      '• No celular: menu ⋮ do navegador → "Instalar app" / "Adicionar à tela inicial".\n' +
+      '• No computador: ícone de instalar (⊕) na barra de endereço, ou menu ⋮ → "Instalar".'
+    );
+  }
+}
+
 // ═══════════════════ ETAPA 1 — Tipo + Modo de Busca ═════════
 
 function selecionarTipo(tipo) {
@@ -174,22 +268,15 @@ async function buscarCatmat() {
   document.getElementById('btn-confirmar-cat').disabled = true;
 
   try {
-    const resp = await fetch(`${API}/api/catmat/buscar`, {
+    const data = await fetchJson(`${API}/api/catmat/buscar`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tipo: ESTADO.tipo, query, descricao }),
     });
-
-    if (!resp.ok) {
-      const err = await resp.json();
-      throw new Error(err.detail || 'Erro ao buscar catálogo');
-    }
-
-    const data = await resp.json();
     renderizarResultadosCat(data.resultados, query);
 
   } catch (e) {
-    toast(`Erro: ${e.message}`, 'error');
+    toast(e.message, 'error');
     voltarEtapa(1);
   } finally {
     mostrarLoading('loading-cat', false);
@@ -207,15 +294,14 @@ async function buscarPorDescricaoFallback() {
 
   try {
     const query = desc.split(/\s+/).slice(0, 4).join(' ');
-    const resp = await fetch(`${API}/api/catmat/buscar`, {
+    const data = await fetchJson(`${API}/api/catmat/buscar`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tipo: ESTADO.tipo, query, descricao: desc }),
     });
-    const data = await resp.json();
     renderizarResultadosCat(data.resultados, desc);
   } catch (e) {
-    toast(`Erro: ${e.message}`, 'error');
+    toast(e.message, 'error');
   } finally {
     mostrarLoading('loading-cat', false);
   }
@@ -654,7 +740,7 @@ async function salvarBusca() {
   if (!ESTADO.empresas.length) { toast('Nenhuma busca para salvar', 'warn'); return; }
   const item = ESTADO.itemSelecionado;
   try {
-    const resp = await fetch(`${API}/api/buscas/salvar`, {
+    const data = await fetchJson(`${API}/api/buscas/salvar`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -668,7 +754,6 @@ async function salvarBusca() {
         empresas:     ESTADO.empresas,
       }),
     });
-    const data = await resp.json();
     ESTADO.buscaId = data.id;
     toast('Busca salva com sucesso! 💾', 'success');
   } catch (e) {
@@ -681,8 +766,7 @@ async function abrirModalBuscasSalvas() {
   const container = document.getElementById('lista-buscas-salvas');
   container.innerHTML = '<div class="loading"><div class="spinner"></div><span>Carregando...</span></div>';
   try {
-    const resp   = await fetch(`${API}/api/buscas/listar`);
-    const data   = await resp.json();
+    const data   = await fetchJson(`${API}/api/buscas/listar`);
     const buscas = data.buscas || [];
     if (!buscas.length) {
       container.innerHTML = '<p style="text-align:center;padding:32px;color:var(--texto-leve)">Nenhuma busca salva.</p>';
@@ -710,8 +794,7 @@ async function abrirModalBuscasSalvas() {
 
 async function carregarBusca(id) {
   try {
-    const resp  = await fetch(`${API}/api/buscas/${id}`);
-    const data  = await resp.json();
+    const data  = await fetchJson(`${API}/api/buscas/${id}`);
     const busca = data.busca;
 
     ESTADO.itemSelecionado = {

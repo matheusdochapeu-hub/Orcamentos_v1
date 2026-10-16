@@ -34,7 +34,8 @@ def lev_ratio(s1: str, s2: str) -> float:
 from database.paths import db_path
 
 BASE_API = "https://dadosabertos.compras.gov.br"
-TIMEOUT  = 20.0
+TIMEOUT  = 20.0        # usado para popular o cache (operação de fundo)
+TIMEOUT_API = 9.0      # busca online no caminho do usuário: curto p/ não travar
 CACHE_DB = db_path("catmat_cache.db")
 
 # Quantas páginas baixar para o cache de FALLBACK (100 itens/página × N páginas)
@@ -301,61 +302,78 @@ async def _buscar_online(tipo: str, texto_busca: str,
     else:
         cobertura_min = 0.45
 
+    def _processar(itens: list) -> tuple[list[dict], int]:
+        """Filtra/pontua um lote de itens. Devolve (parciais, qtd_itens)."""
+        parciais: list[dict] = []
+        casam_algo = 0
+        for item in itens:
+            if tipo == "material":
+                cod = item.get("codigoItem", "")
+                nome_pdm = item.get("nomePdm", "") or ""
+                desc = item.get("descricaoItem", "") or ""
+                texto = f"{nome_pdm} {desc}"
+                montar = lambda s, c=cod, n=nome_pdm, d=desc: _montar_resultado_material(c, n, d, s)
+            else:
+                cod = item.get("codigoServico", "")
+                nome_srv = item.get("nomeServico", "") or ""
+                nome_cls = item.get("nomeClasse", "") or ""
+                nome_grp = item.get("nomeGrupo", "") or ""
+                texto = f"{nome_srv} {nome_cls} {nome_grp}"
+                montar = lambda s, c=cod, a=nome_srv, b=nome_cls, g=nome_grp: _montar_resultado_servico(c, a, b, g, s)
+
+            cob = _cobertura(palavras_sig, texto)
+            score = _calcular_score(query_norm, palavras_q, texto)
+            if cob >= cobertura_min and score >= _LIMIAR:
+                casam_algo += 1
+                parciais.append(montar(score))
+        return parciais, len(itens)
+
+    async def _tentar_chave(client, chave: str) -> list[dict]:
+        """Consulta a API com UM nome de parâmetro; devolve itens filtrados."""
+        try:
+            r = await client.get(
+                endpoint,
+                params={chave: termo, "pagina": 1, "tamanhoPagina": 100},
+            )
+            if r.status_code != 200:
+                return []
+            # Parse defensivo: a API pode responder 200 com corpo não-JSON
+            # (HTML de manutenção) — não deixamos isso virar exceção silenciosa.
+            try:
+                payload = r.json()
+            except Exception:
+                return []
+            itens = (payload or {}).get("resultado", []) if isinstance(payload, dict) else []
+            if not itens:
+                return []
+            parciais, total = _processar(itens)
+            # Anti-ruído: se quase nenhum item atendeu o filtro, a API
+            # provavelmente ignorou o parâmetro (devolveu catálogo genérico).
+            fracao = len(parciais) / max(total, 1)
+            if fracao < 0.03 and total >= 20:
+                return []
+            return parciais
+        except Exception as e:
+            print(f"[Online {tipo}/{chave}] {e}")
+            return []
+
+    # Tenta todos os nomes de parâmetro EM PARALELO, com timeout curto por
+    # request. Antes era sequencial (até 4×20s = 80s) e estourava o tempo do
+    # servidor, devolvendo resposta vazia ao usuário. Agora o tempo total é
+    # ~o de UMA requisição. Fica com o parâmetro que trouxe mais resultados.
     resultados: list[dict] = []
     async with httpx.AsyncClient(
-        timeout=TIMEOUT, headers={"Accept": "application/json"}
+        timeout=TIMEOUT_API, headers={"Accept": "application/json"}
     ) as client:
-        for chave in chaves_param:
-            try:
-                r = await client.get(
-                    endpoint,
-                    params={chave: termo, "pagina": 1, "tamanhoPagina": 100},
-                )
-                if r.status_code != 200:
-                    continue
-                itens = r.json().get("resultado", [])
-                if not itens:
-                    continue
-
-                parciais: list[dict] = []
-                casam_algo = 0   # itens que casam ALGUMA palavra significativa
-                for item in itens:
-                    if tipo == "material":
-                        cod = item.get("codigoItem", "")
-                        nome_pdm = item.get("nomePdm", "") or ""
-                        desc = item.get("descricaoItem", "") or ""
-                        texto = f"{nome_pdm} {desc}"
-                        montar = lambda s: _montar_resultado_material(cod, nome_pdm, desc, s)
-                    else:
-                        cod = item.get("codigoServico", "")
-                        nome_srv = item.get("nomeServico", "") or ""
-                        nome_cls = item.get("nomeClasse", "") or ""
-                        nome_grp = item.get("nomeGrupo", "") or ""
-                        texto = f"{nome_srv} {nome_cls} {nome_grp}"
-                        montar = lambda s: _montar_resultado_servico(cod, nome_srv, nome_cls, nome_grp, s)
-
-                    cob = _cobertura(palavras_sig, texto)
-                    score = _calcular_score(query_norm, palavras_q, texto)
-                    # Entra se casar a FRAÇÃO mínima de palavras E tiver score útil.
-                    if cob >= cobertura_min and score >= _LIMIAR:
-                        casam_algo += 1
-                        parciais.append(montar(score))
-
-                # Heurística anti-ruído: se quase nenhum item ATENDEU o filtro
-                # (cobertura mínima), a API provavelmente ignorou este parâmetro
-                # e devolveu catálogo genérico — descarta e tenta o próximo nome
-                # de parâmetro. Conta no MESMO critério de entrada (não em "casou
-                # qualquer palavra"), senão um dump genérico passaria batido.
-                fracao = casam_algo / max(len(itens), 1)
-                if fracao < 0.03 and len(itens) >= 20:
-                    continue
-
-                if parciais:
-                    resultados = parciais
-                    break  # parâmetro realmente filtrou
-            except Exception as e:
-                print(f"[Online {tipo}/{chave}] {e}")
-                continue
+        tentativas = await asyncio.gather(
+            *[_tentar_chave(client, c) for c in chaves_param],
+            return_exceptions=True,
+        )
+    melhores: list[dict] = []
+    for t in tentativas:
+        if isinstance(t, list) and len(t) > len(melhores):
+            melhores = t
+    resultados = melhores
 
     resultados.sort(key=lambda x: x["score"], reverse=True)
     return resultados[:max_res]
@@ -537,25 +555,54 @@ async def buscar_catmat_catser(
     """
     Busca CATMAT (tipo='material') ou CATSER (tipo='servico').
 
-    Fluxo:
-      1. Tenta busca ONLINE na API do governo (cobre o catálogo inteiro).
-      2. Se vier vazio/offline, usa o cache local como FALLBACK (populando-o
-         na primeira vez).
-      3. Retorna os melhores resultados ordenados por relevância.
+    Fluxo (NUNCA bloqueia o request do usuário por mais que alguns segundos):
+      1. Busca ONLINE na API do governo (timeout curto, tentativas em paralelo).
+      2. Se vier vazio, usa o cache local SE já estiver populado (consulta
+         rápida em SQLite).
+      3. Se o cache ainda não existe, dispara a montagem dele EM SEGUNDO PLANO
+         (demora ~minutos) e devolve uma mensagem pedindo para tentar de novo —
+         em vez de travar o request até o servidor cortar a conexão.
     """
     texto_busca = f"{query} {descricao}".strip()
+    cat = "CATMAT" if tipo == "material" else "CATSER"
 
-    # 1) Busca online (preferencial)
-    resultados = await _buscar_online(tipo, texto_busca, max_res=max_resultados)
+    # 1) Busca online (preferencial) — curta e tolerante a falha
+    try:
+        resultados = await _buscar_online(tipo, texto_busca, max_res=max_resultados)
+    except Exception as e:
+        print(f"[buscar_catmat_catser online] {e}")
+        resultados = []
 
-    # 2) Fallback no cache local
+    # 2) Fallback no cache local — SÓ se já estiver populado (consulta local rápida)
+    if not resultados and _cache_populado(tipo):
+        try:
+            resultados = _buscar_no_cache(tipo, query, descricao, max_res=max_resultados)
+        except Exception as e:
+            print(f"[buscar_catmat_catser cache] {e}")
+
+    # 3) Nada online e cache ainda não pronto: monta o cache em SEGUNDO PLANO
+    #    (não espera — a montagem baixa dezenas de páginas e levaria minutos,
+    #    estourando o tempo do servidor) e devolve uma mensagem amigável.
+    if not resultados and not _cache_populado(tipo):
+        # Guarda referência forte à task (senão o event loop pode coletá-la
+        # antes de terminar — "Task was destroyed but it is pending").
+        t = asyncio.create_task(_popular_cache_seguro(tipo))
+        _TAREFAS_FUNDO.add(t)
+        t.add_done_callback(_TAREFAS_FUNDO.discard)
+        return [{
+            "codigo": "—",
+            "descricao": (
+                "Estamos preparando o índice de busca do catálogo pela primeira "
+                "vez (leva cerca de 1 minuto). Tente a busca novamente em instantes."
+            ),
+            "descricao_completa": "",
+            "tipo": cat,
+            "score": 0.0,
+            "fonte": "—",
+            "placeholder": True,   # sinaliza "não é um resultado real"
+        }]
+
     if not resultados:
-        if not _cache_populado(tipo):
-            await _popular_cache(tipo)
-        resultados = _buscar_no_cache(tipo, query, descricao, max_res=max_resultados)
-
-    if not resultados:
-        cat = "CATMAT" if tipo == "material" else "CATSER"
         return [{
             "codigo": "—",
             "descricao": (
@@ -570,3 +617,23 @@ async def buscar_catmat_catser(
         }]
 
     return resultados
+
+
+# Lock por tipo para não disparar várias montagens de cache em paralelo quando
+# vários usuários buscam ao mesmo tempo antes do cache existir.
+_POPULANDO: set[str] = set()
+# Referências fortes às tasks de fundo (evita coleta precoce pelo event loop).
+_TAREFAS_FUNDO: set = set()
+
+
+async def _popular_cache_seguro(tipo: str):
+    """Popula o cache em segundo plano, evitando montagens concorrentes."""
+    if tipo in _POPULANDO:
+        return
+    _POPULANDO.add(tipo)
+    try:
+        await _popular_cache(tipo)
+    except Exception as e:
+        print(f"[_popular_cache_seguro {tipo}] {e}")
+    finally:
+        _POPULANDO.discard(tipo)
