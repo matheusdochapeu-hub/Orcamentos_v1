@@ -296,10 +296,25 @@
       <input type="password" id="config-maps-key" placeholder="AIzaSy... (Geocoding + Places API)" />
       <small style="color:var(--texto-leve);font-size:.78rem">
         <strong>Não é obrigatória.</strong> O sistema já encontra empresas sem nenhuma chave.
-        Se você informar uma chave do Google, ela será usada para enriquecer os resultados
-        (avaliações e telefones). Obtenha em
+        Se você informar uma chave do Google, ela enriquece os resultados
+        (avaliações e telefones). <strong>Atenção:</strong> o Google exige cadastrar um
+        cartão de crédito para ativar a chave, mesmo na cota grátis. Obtenha em
         <a href="https://console.cloud.google.com/apis/credentials" target="_blank">console.cloud.google.com</a>
         — ative Geocoding API e Places API.
+      </small>
+    </div>
+
+    <div class="config-row">
+      <span>🧭</span>
+      <label>Geoapify API Key <small style="color:var(--texto-leve);font-weight:400">(opcional, grátis)</small></label>
+    </div>
+    <div class="form-group">
+      <input type="password" id="config-geoapify-key" placeholder="chave Geoapify (sem cartão de crédito)" />
+      <small style="color:var(--texto-leve);font-size:.78rem">
+        Alternativa ao Google <strong>grátis e sem cartão de crédito</strong> (3.000 buscas/dia).
+        Melhora a descoberta de estabelecimentos por categoria. Crie uma conta grátis e gere a
+        chave em
+        <a href="https://myprojects.geoapify.com/register" target="_blank">myprojects.geoapify.com</a>.
       </small>
     </div>
 

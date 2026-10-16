@@ -53,7 +53,8 @@ nada. As fontes são:
 |-------|-----------|-------------------|
 | ✅ **PNCP** (alta precisão) | Encontra empresas que **já forneceram este tipo de item ao poder público** (histórico de contratações). Comprovadamente vendem o produto → vão para o **topo** da lista com o selo "já forneceu". | **Não** |
 | 🏛️ **Receita Federal** (cobertura) | Lista empresas **ativas** da base CNPJ filtrando por **CNAE (atividade) + município + UF**. Completa a lista quando o histórico é escasso. | **Não** |
-| 🗺️ **Google Maps** (usada se houver chave) | Enriquece os resultados com estabelecimentos do Google (avaliação, telefone). | Sim (opcional) |
+| 🧭 **Geoapify** (usada se houver chave) | Busca de estabelecimentos por categoria + raio (base OpenStreetMap, com busca estruturada). **Grátis e sem cartão de crédito** (~3.000 buscas/dia). | Sim (opcional, grátis) |
+| 🗺️ **Google Maps** (usada se houver chave) | Enriquece os resultados com estabelecimentos do Google (avaliação, telefone). ⚠️ Exige **cartão de crédito** para ativar a chave, mesmo na cota grátis. | Sim (opcional) |
 
 > **Por que a busca ficou mais precisa:** o CNAE diz só a *atividade declarada*
 > da empresa (genérico). O **PNCP** mostra quem **realmente já vendeu** aquele

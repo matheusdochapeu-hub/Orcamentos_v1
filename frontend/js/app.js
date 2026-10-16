@@ -241,6 +241,7 @@ async function buscarEmpresas() {
         tipo_busca:  ESTADO.tipoBusca,
         fontes:      fonte,
         maps_key:    mapsKey,
+        geoapify_key: localStorage.getItem('geoapify_key') || '',
       }),
     });
     clearTimeout(timeoutId);
@@ -630,6 +631,8 @@ async function excluirBusca(id, btn) {
 
 function abrirModalConfig() {
   document.getElementById('config-maps-key').value = localStorage.getItem('maps_key') || '';
+  const geo = document.getElementById('config-geoapify-key');
+  if (geo) geo.value = localStorage.getItem('geoapify_key') || '';
   document.getElementById('modal-config').classList.add('aberto');
 }
 
@@ -645,6 +648,11 @@ function salvarConfig() {
 
   if (mapsKey) localStorage.setItem('maps_key', mapsKey);
   else         localStorage.removeItem('maps_key');
+
+  const geoEl = document.getElementById('config-geoapify-key');
+  const geoKey = geoEl ? geoEl.value.trim() : '';
+  if (geoKey) localStorage.setItem('geoapify_key', geoKey);
+  else        localStorage.removeItem('geoapify_key');
 
   fecharModal('modal-config');
   toast('✅ Configurações salvas!', 'success');
