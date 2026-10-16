@@ -28,10 +28,65 @@ from services import geocode
 PLACES_URL = "https://api.geoapify.com/v2/places"
 TIMEOUT = 25.0
 
-# Mapa simples de intenção → categorias Geoapify (taxonomia própria do Geoapify).
-# commercial.* cobre lojas/varejo; service.* cobre serviços.
+# Categorias amplas (fallback). As categorias-raiz do Geoapify são válidas e
+# incluem todas as subcategorias abaixo delas.
 _CATEGORIAS_MATERIAL = "commercial"
 _CATEGORIAS_SERVICO = "service,commercial.business_to_business"
+
+# Mapa palavra-chave do item -> subcategorias ESPECÍFICAS do Geoapify.
+# Quando o termo buscado casa aqui, pedimos a subcategoria certa (resultado mais
+# preciso) em vez da categoria ampla. Taxonomia: docs Geoapify (categories).
+_SUBCATEGORIAS = {
+    # material / produtos
+    "movel": "commercial.furniture", "mobiliario": "commercial.furniture",
+    "cadeira": "commercial.furniture", "mesa": "commercial.furniture",
+    "estofado": "commercial.furniture", "sofa": "commercial.furniture",
+    "construcao": "commercial.hardware", "ferramenta": "commercial.hardware",
+    "ferragem": "commercial.hardware", "material eletrico": "commercial.hardware",
+    "hidraulico": "commercial.hardware", "tinta": "commercial.hardware",
+    "eletronico": "commercial.electronics", "computador": "commercial.electronics",
+    "notebook": "commercial.electronics", "informatica": "commercial.electronics",
+    "celular": "commercial.electronics", "impressora": "commercial.electronics",
+    "eletrodomestico": "commercial.electronics",
+    "papel": "commercial.stationery", "papelaria": "commercial.stationery",
+    "escritorio": "commercial.stationery", "caneta": "commercial.stationery",
+    "livro": "commercial.books", "didatico": "commercial.books",
+    "alimento": "commercial.supermarket", "merenda": "commercial.supermarket",
+    "genero": "commercial.supermarket", "cesta": "commercial.supermarket",
+    "medicamento": "commercial.health_and_beauty.pharmacy",
+    "farmaco": "commercial.health_and_beauty.pharmacy",
+    "hospitalar": "commercial.health_and_beauty.medical_supply",
+    "limpeza": "commercial.chemist", "higiene": "commercial.chemist",
+    "uniforme": "commercial.clothing", "vestuario": "commercial.clothing",
+    "fardamento": "commercial.clothing", "calcado": "commercial.shoes",
+    "pneu": "commercial.vehicle", "veiculo": "commercial.vehicle",
+    "autopeca": "commercial.vehicle", "peca": "commercial.vehicle",
+    "combustivel": "commercial.gas", "gas": "commercial.gas",
+    "jardinagem": "commercial.garden", "agricola": "commercial.agrarian",
+    "racao": "commercial.pet",
+    # serviços
+    "manutencao": "service.vehicle", "pintura": "service", "obra": "service",
+    "grafica": "commercial.printing", "impressao": "commercial.printing",
+    "lavanderia": "service.cleaning", "dedetizacao": "service.cleaning",
+}
+
+
+def _categorias_para(nome_item: str, descricao: str, tipo_cat: str) -> str:
+    """Escolhe subcategorias específicas quando o item casa; senão, as amplas."""
+    texto = _norm(f"{nome_item} {descricao}")
+    palavras = set(texto.split())
+    especificas: list[str] = []
+    for chave, cat in _SUBCATEGORIAS.items():
+        if " " in chave:
+            if chave in texto and cat not in especificas:
+                especificas.append(cat)
+        elif chave in palavras and cat not in especificas:
+            especificas.append(cat)
+    if especificas:
+        return ",".join(especificas[:4])
+    return (_CATEGORIAS_MATERIAL
+            if tipo_cat.upper() in ("CATMAT", "MATERIAL")
+            else _CATEGORIAS_SERVICO)
 
 _STOP = {"de","da","do","dos","das","para","com","por","em","um","uma","e","a","o",
          "ltda","me","epp","comercio","servico","servicos"}
@@ -101,9 +156,10 @@ class ProvedorGeoapify(ProvedorEmpresas):
             lat, lng = centro["lat"], centro["lng"]
 
         raio_m = min(max(raio_km, 1), 100) * 1000
-        categorias = (_CATEGORIAS_MATERIAL
-                      if tipo_cat.upper() in ("CATMAT", "MATERIAL")
-                      else _CATEGORIAS_SERVICO)
+        categorias = _categorias_para(nome_item, kwargs.get("descricao", ""), tipo_cat)
+        # Se usamos subcategorias específicas, elas já recortam bem; o filtro
+        # textual local vira só um reforço opcional (não descartamos tudo).
+        usou_especifica = categorias not in (_CATEGORIAS_MATERIAL, _CATEGORIAS_SERVICO)
 
         # A Places API do Geoapify filtra por ESPAÇO (categoria + área), não por
         # texto livre. Então pedimos os POIs da categoria no raio e filtramos
@@ -136,8 +192,9 @@ class ProvedorGeoapify(ProvedorEmpresas):
             emp = _para_empresa(feat)
             if not emp["nome"]:
                 continue
-            # casa com o item pelas palavras (nome + categorias)
-            if palavras_item:
+            # Com subcategoria específica, confiamos no recorte da API e mantemos
+            # todos. Com categoria ampla, exigimos casar as palavras do item.
+            if palavras_item and not usou_especifica:
                 alvo = _norm(f"{emp['nome']} {emp.get('cnae_descricao','')}")
                 if not any(p in alvo for p in palavras_item):
                     continue
