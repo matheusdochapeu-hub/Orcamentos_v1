@@ -50,11 +50,17 @@ async def buscar_empresas(req: BuscaEmpresasRequest):
     if not req.cidade.strip():
         raise HTTPException(400, "Cidade não pode ser vazia")
 
-    # Chaves opcionais do usuário (só usadas pelas fontes correspondentes)
+    # Chave do Google: continua opcional e vem do usuário (exige cartão no Google).
     if req.maps_key and req.maps_key.strip():
         os.environ["GOOGLE_MAPS_API_KEY"] = req.maps_key.strip()
-    if req.geoapify_key and req.geoapify_key.strip():
-        os.environ["GEOAPIFY_API_KEY"] = req.geoapify_key.strip()
+
+    # Chave do Geoapify: é FIXA no servidor (variável de ambiente GEOAPIFY_API_KEY),
+    # usada como motor de busca para todos os usuários — eles não a veem nem a
+    # informam. Só aceitamos uma chave vinda do cliente se o servidor NÃO tiver
+    # uma configurada (ex.: ambiente de desenvolvimento local).
+    if not (os.getenv("GEOAPIFY_API_KEY") or "").strip():
+        if req.geoapify_key and req.geoapify_key.strip():
+            os.environ["GEOAPIFY_API_KEY"] = req.geoapify_key.strip()
 
     try:
         resultado = await buscar_empresas_agregado(

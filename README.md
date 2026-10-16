@@ -261,3 +261,26 @@ A máquina **dorme quando ociosa** e acorda na primeira requisição (economia).
 
 > Para voltar ao Render a qualquer momento, nada foi removido: `Procfile` e
 > `runtime.txt` continuam no projeto.
+
+---
+
+## App instalável (PWA)
+
+O sistema é um **PWA**: pode ser **instalado como app** no celular ou no
+computador (ícone na tela inicial, abre em janela própria, carrega rápido).
+
+- No **Chrome/Edge (desktop)**: aparece um ícone de instalar na barra de endereço.
+- No **Android**: menu → "Instalar aplicativo" / "Adicionar à tela inicial".
+- No **iPhone (Safari)**: Compartilhar → "Adicionar à Tela de Início".
+
+Arquivos: `frontend/manifest.webmanifest`, `frontend/sw.js` (service worker) e
+`frontend/icons/`. O service worker guarda a "casca" do app (HTML/CSS/JS) para
+abrir rápido, mas **nunca** cacheia as chamadas de API (`/api/...`) — os dados
+de busca são sempre atuais.
+
+## Motor de busca em mapa (chave fixa no servidor)
+
+A busca de estabelecimentos em mapa (Geoapify) usa uma **chave fixa configurada
+no servidor** (variável `GEOAPIFY_API_KEY`). Ela vale para todos os usuários,
+que **não a veem nem precisam configurar nada**. No Render, defina em
+*Environment → GEOAPIFY_API_KEY*.
