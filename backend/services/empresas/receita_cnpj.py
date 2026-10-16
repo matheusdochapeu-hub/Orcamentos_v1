@@ -290,10 +290,18 @@ async def _buscar_minhareceita(client, cnaes, uf, cod_municipio, cursor=None,
     if cursor:
         params["cursor"] = cursor
 
-    try:
-        r = await client.get(endpoint, params=params)
-    except Exception as e:
-        return [], "", f"falha de rede ao acessar {endpoint}: {e}"
+    # Retry com backoff para 429 (limite de requisições) — a instância pública
+    # é compartilhada e às vezes retorna 429 passageiro.
+    r = None
+    for tentativa in range(3):
+        try:
+            r = await client.get(endpoint, params=params)
+        except Exception as e:
+            return [], "", f"falha de rede ao acessar {endpoint}: {e}"
+        if r.status_code != 429:
+            break
+        if tentativa < 2:
+            await asyncio.sleep(1.5 * (tentativa + 1))  # 1.5s, depois 3s
 
     if r.status_code == 400:
         return [], "", ("a fonte recusou os filtros (HTTP 400) — verifique UF/município/CNAE")

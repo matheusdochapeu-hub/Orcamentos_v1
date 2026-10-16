@@ -30,11 +30,12 @@ class BuscaEmpresasRequest(BaseModel):
     # Tipo de busca
     tipo_busca: str      # "exata" | "similaridade"
 
-    # Fonte dos dados: "receita" (padrão) | "google" | "ambas"
-    fontes: Optional[str] = "receita"
+    # Fonte dos dados: "ambas" (padrão) combina todas as fontes disponíveis
+    fontes: Optional[str] = "ambas"
 
-    # Chave Google Maps do usuário (só necessária para fontes google/ambas)
-    maps_key: Optional[str] = ""
+    # Chaves opcionais do usuário (salvas só no navegador)
+    maps_key: Optional[str] = ""       # Google Maps (exige cartão no Google)
+    geoapify_key: Optional[str] = ""   # Geoapify (grátis, sem cartão)
 
 
 @router.post("/buscar")
@@ -49,9 +50,11 @@ async def buscar_empresas(req: BuscaEmpresasRequest):
     if not req.cidade.strip():
         raise HTTPException(400, "Cidade não pode ser vazia")
 
-    # Chave Google só é usada quando a fonte envolve o Google
+    # Chaves opcionais do usuário (só usadas pelas fontes correspondentes)
     if req.maps_key and req.maps_key.strip():
         os.environ["GOOGLE_MAPS_API_KEY"] = req.maps_key.strip()
+    if req.geoapify_key and req.geoapify_key.strip():
+        os.environ["GEOAPIFY_API_KEY"] = req.geoapify_key.strip()
 
     try:
         resultado = await buscar_empresas_agregado(

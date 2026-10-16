@@ -22,11 +22,13 @@ from services.empresas.receita_cnpj import ProvedorReceita
 from services.empresas.google_maps import ProvedorGoogle
 from services.empresas.pncp import ProvedorPNCP
 from services.empresas.osm import ProvedorOSM
+from services.empresas.geoapify import ProvedorGeoapify
 
 _PROVEDORES = {
     "pncp": ProvedorPNCP(),
     "receita": ProvedorReceita(),
     "osm": ProvedorOSM(),
+    "geoapify": ProvedorGeoapify(),
     "google": ProvedorGoogle(),
 }
 
@@ -34,7 +36,7 @@ _PROVEDORES = {
 def _resolver_fontes(fontes: str) -> list[str]:
     f = (fontes or "ambas").strip().lower()
     if f in ("ambas", "todas", "both", "hibrido", "híbrido"):
-        return ["pncp", "receita", "osm", "google"]
+        return ["pncp", "receita", "osm", "geoapify", "google"]
     if f in _PROVEDORES:
         return [f]
     return ["pncp", "receita", "osm"]  # padrão seguro = híbrido
@@ -105,16 +107,18 @@ async def buscar_empresas_agregado(
     combinadas: list[dict] = []
     por_chave: dict[str, dict] = {}
     fontes_usadas: list[str] = []
+    erros_relevantes: list[str] = []   # erros a mostrar SÓ se a busca vier vazia
 
     # Processa na ordem de 'ativos' (pncp primeiro → alta confiança tem prioridade)
     for nome, res in zip(ativos, resultados):
         if isinstance(res, Exception):
-            # PNCP e OSM são complementos: não incomodam o usuário se falharem.
-            # Só mostramos ⚠️ para a Receita (fonte principal).
-            if nome in ("pncp", "osm"):
+            # Complementos (PNCP/OSM/Geoapify/Google) nunca incomodam o usuário.
+            if nome in ("pncp", "osm", "geoapify", "google"):
                 avisos.append(f"[interno] {nome} indisponível: {res}")
             else:
-                avisos.append(f"⚠️ {res}")
+                # Receita é a fonte principal, mas se as outras fontes trouxerem
+                # resultados, a falha dela não precisa virar alarme vermelho.
+                erros_relevantes.append(str(res))
             continue
         if res:
             fontes_usadas.append(nome)
@@ -136,6 +140,14 @@ async def buscar_empresas_agregado(
 
     # Empresas que já forneceram o item ao poder público vêm primeiro.
     combinadas.sort(key=lambda e: (0 if e.get("ja_forneceu") else 1))
+
+    # Falha da Receita: só vira ⚠️ se NADA foi encontrado. Se as outras fontes
+    # (PNCP/OSM/Google) trouxeram empresas, apenas registramos como interno.
+    for msg in erros_relevantes:
+        if combinadas:
+            avisos.append(f"[interno] receita indisponível: {msg}")
+        else:
+            avisos.append(f"⚠️ {msg}")
 
     return {
         "empresas": combinadas[:max_empresas],
