@@ -5,7 +5,9 @@ import aiosqlite
 import json
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "orcamentos.db"
+from database.paths import db_path
+
+DB_PATH = db_path("orcamentos.db")
 
 
 async def get_db():

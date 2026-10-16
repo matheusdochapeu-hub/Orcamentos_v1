@@ -211,3 +211,53 @@ Orçamentos/
 cd "C:\Users\matheus.ribeiro\Desktop\Matheus\5. IA\Orçamentos\backend"
 C:\Users\matheus.ribeiro\AppData\Local\Programs\Python\Python314\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
+
+---
+
+## Publicar no Fly.io (recomendado — SQLite persistente)
+
+O app roda em qualquer host com Docker. O **Fly.io** é a opção recomendada
+porque oferece um **volume persistente**: assim os bancos SQLite (buscas salvas
+e caches) **não se perdem a cada deploy** — diferente do disco efêmero do Render.
+
+Arquivos de deploy já incluídos no projeto:
+- `Dockerfile` — imagem de produção (Python 3.12 + FastAPI, serve o frontend).
+- `fly.toml` — configuração do Fly (porta 8080, volume em `/data`, região GRU).
+- `.dockerignore` — mantém a imagem enxuta e sem os `.db` locais.
+
+> **Como o SQLite persiste:** os caminhos dos bancos agora respeitam a variável
+> `DATA_DIR` (ver `backend/database/paths.py`). No Fly, `DATA_DIR=/data` aponta
+> para o volume montado; localmente/no Render, sem essa variável, continua em
+> `backend/database/` (nada muda).
+
+### Passo a passo
+
+```bash
+# 1. Instale o CLI do Fly e faça login
+#    (Windows PowerShell)  iwr https://fly.io/install.ps1 -useb | iex
+#    (Linux/macOS)         curl -L https://fly.io/install.sh | sh
+fly auth login
+
+# 2. Na raiz do projeto, crie o app (use um nome único; pode editar o fly.toml)
+fly launch --no-deploy --copy-config --name orcamentos-publicos-SEUNOME
+
+# 3. Crie o volume persistente (mesmo nome do [mounts] do fly.toml) na região GRU
+fly volumes create orcamentos_data --region gru --size 1
+
+# 4. (Opcional) Configure chaves como secrets — nunca ficam no código
+fly secrets set GEOAPIFY_API_KEY=sua_chave          # opcional (grátis, sem cartão)
+fly secrets set PORTAL_TRANSPARENCIA_KEY=sua_chave  # opcional (sanções CEIS/CNEP)
+# RECEITA_CUSTOM_URL=... se um dia você hospedar seu próprio MinhaReceita
+
+# 5. Suba a aplicação
+fly deploy
+
+# 6. Abra no navegador
+fly open
+```
+
+Pronto — o app fica em `https://orcamentos-publicos-SEUNOME.fly.dev`.
+A máquina **dorme quando ociosa** e acorda na primeira requisição (economia).
+
+> Para voltar ao Render a qualquer momento, nada foi removido: `Procfile` e
+> `runtime.txt` continuam no projeto.

@@ -36,10 +36,12 @@ from unidecode import unidecode
 from services.empresas.base import ProvedorEmpresas, empresa_vazia
 from services import geocode
 
+from database.paths import db_path
+
 OVERPASS_URL = os.getenv("OVERPASS_URL", "https://overpass-api.de/api/interpreter")
 OSM_ENABLED = os.getenv("OSM_ENABLED", "1").strip() not in ("0", "false", "False", "")
 TIMEOUT = 35.0
-CACHE_DB = Path(__file__).resolve().parent.parent.parent / "database" / "catmat_cache.db"
+CACHE_DB = db_path("catmat_cache.db")
 
 # Tags OSM que costumam representar fornecedores de materiais/serviços.
 # Buscamos POIs com qualquer uma destas chaves e filtramos pelo nome depois.

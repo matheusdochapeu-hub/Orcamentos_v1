@@ -46,8 +46,10 @@ def _cnae_numerico(cnae: str) -> str:
     """'4754-7/01' ou '4754701' → '4754701' (só dígitos, como o MinhaReceita espera)."""
     return "".join(ch for ch in str(cnae) if ch.isdigit())
 
+from database.paths import db_path
+
 TIMEOUT = 30.0
-CACHE_DB = Path(__file__).resolve().parent.parent.parent / "database" / "catmat_cache.db"
+CACHE_DB = db_path("catmat_cache.db")
 
 # URL base da instância MinhaReceita (pública por padrão; troque p/ self-host).
 # Aceita tanto RECEITA_CUSTOM_URL (nome genérico) quanto RECEITA_MINHARECEITA_URL.
