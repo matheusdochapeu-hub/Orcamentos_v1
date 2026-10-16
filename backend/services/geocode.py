@@ -26,9 +26,11 @@ from datetime import datetime, timedelta
 
 import httpx
 
+from database.paths import db_path
+
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 TIMEOUT = 20.0
-CACHE_DB = Path(__file__).resolve().parent.parent / "database" / "catmat_cache.db"
+CACHE_DB = db_path("catmat_cache.db")
 USER_AGENT = "OrcamentosPublicos/2.0 (compras publicas; contato via repositorio)"
 
 

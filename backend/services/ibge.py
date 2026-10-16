@@ -24,9 +24,11 @@ from datetime import datetime, timedelta
 import httpx
 from unidecode import unidecode
 
+from database.paths import db_path
+
 IBGE_MUNICIPIOS_UF = "https://servicodados.ibge.gov.br/api/v1/localidades/estados/{uf}/municipios"
 TIMEOUT = 20.0
-CACHE_DB = Path(__file__).resolve().parent.parent / "database" / "catmat_cache.db"
+CACHE_DB = db_path("catmat_cache.db")
 
 
 def _norm(s: str) -> str:

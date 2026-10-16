@@ -31,9 +31,11 @@ def lev_ratio(s1: str, s2: str) -> float:
     return SequenceMatcher(None, s1 or "", s2 or "").ratio()
 
 
+from database.paths import db_path
+
 BASE_API = "https://dadosabertos.compras.gov.br"
 TIMEOUT  = 20.0
-CACHE_DB = Path(__file__).parent.parent / "database" / "catmat_cache.db"
+CACHE_DB = db_path("catmat_cache.db")
 
 # Quantas páginas baixar para o cache de FALLBACK (100 itens/página × N páginas)
 PAGINAS_CATMAT = 50

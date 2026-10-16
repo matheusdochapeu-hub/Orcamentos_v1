@@ -1,0 +1,30 @@
+# Configuração de deploy no Fly.io.
+# Troque "app" por um nome único (ex.: orcamentos-publicos-SEUNOME) ou deixe o
+# `fly launch` gerar um para você.
+app = "orcamentos-publicos"
+primary_region = "gru"   # São Paulo (GRU). Veja outras com `fly platform regions`.
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  # Diretório dos bancos SQLite = volume persistente montado abaixo.
+  DATA_DIR = "/data"
+  PORT = "8080"
+
+# Volume persistente: é isto que faz o SQLite NÃO zerar entre deploys/reinícios.
+[mounts]
+  source = "orcamentos_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Economia: a máquina dorme quando ociosa e acorda na primeira requisição.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

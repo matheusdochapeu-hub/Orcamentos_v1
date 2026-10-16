@@ -1,0 +1,11 @@
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+.git/
+.env
+*.log
+.DS_Store
+Thumbs.db
+# Bancos locais não vão para a imagem — serão criados no volume /data
+backend/database/*.db
+INICIAR_SERVIDOR.bat
