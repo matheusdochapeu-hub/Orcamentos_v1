@@ -105,17 +105,18 @@ class ProvedorGeoapify(ProvedorEmpresas):
                       if tipo_cat.upper() in ("CATMAT", "MATERIAL")
                       else _CATEGORIAS_SERVICO)
 
+        # A Places API do Geoapify filtra por ESPAÇO (categoria + área), não por
+        # texto livre. Então pedimos os POIs da categoria no raio e filtramos
+        # pelas palavras do item LOCALMENTE (como fazemos no OSM). Pedimos um
+        # limite maior porque o recorte fino é feito aqui.
         params = {
             "categories": categorias,
             "filter": f"circle:{lng},{lat},{raio_m}",
             "bias": f"proximity:{lng},{lat}",
-            "limit": min(max_empresas, 100),
+            "limit": 200,
             "apiKey": chave,
             "lang": "pt",
         }
-        # 'name' refina por texto quando o termo é significativo
-        if palavras_item:
-            params["name"] = " ".join(palavras_item[:3])
 
         try:
             async with httpx.AsyncClient(
@@ -123,12 +124,8 @@ class ProvedorGeoapify(ProvedorEmpresas):
             ) as client:
                 r = await client.get(PLACES_URL, params=params)
                 if r.status_code != 200:
-                    # tenta sem 'name' (categoria+raio) se o filtro textual zerar
-                    if "name" in params:
-                        params.pop("name")
-                        r = await client.get(PLACES_URL, params=params)
-                    if r.status_code != 200:
-                        return []
+                    print(f"[Geoapify] HTTP {r.status_code}")
+                    return []
                 feats = r.json().get("features", []) or []
         except Exception as e:
             print(f"[Geoapify] {e}")
@@ -139,6 +136,11 @@ class ProvedorGeoapify(ProvedorEmpresas):
             emp = _para_empresa(feat)
             if not emp["nome"]:
                 continue
+            # casa com o item pelas palavras (nome + categorias)
+            if palavras_item:
+                alvo = _norm(f"{emp['nome']} {emp.get('cnae_descricao','')}")
+                if not any(p in alvo for p in palavras_item):
+                    continue
             if emp.get("lat") and emp.get("lng"):
                 d = geocode.distancia_km(lat, lng, emp["lat"], emp["lng"])
                 emp["distancia_km"] = round(d, 1)
