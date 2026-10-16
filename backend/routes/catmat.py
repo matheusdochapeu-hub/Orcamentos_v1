@@ -39,8 +39,12 @@ async def buscar_cat(req: BuscaCatRequest):
     except Exception as e:
         raise HTTPException(502, f"Erro ao consultar API do governo: {str(e)}")
 
+    # Resultado "placeholder" (ex.: índice sendo preparado) não passa pelo
+    # Gemini — a mensagem precisa chegar intacta ao usuário.
+    _ehPlaceholder = len(resultados) == 1 and resultados[0].get("placeholder")
+
     # Se o usuário forneceu chave Gemini, melhora o ranqueamento
-    if req.gemini_key and req.gemini_key.strip():
+    if not _ehPlaceholder and req.gemini_key and req.gemini_key.strip():
         tipo_cat = "CATMAT" if tipo == "material" else "CATSER"
         resultados = await ranquear_com_gemini(
             query=req.query,

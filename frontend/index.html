@@ -26,6 +26,9 @@
     <p>Encontre fornecedores para suas compras — em um só lugar</p>
   </div>
   <div class="header-actions">
+    <button id="btn-instalar" class="btn btn-instalar hidden" onclick="instalarApp()">
+      📲 Baixar app
+    </button>
     <button class="btn btn-outline" onclick="abrirModalBuscasSalvas()" style="color:#fff;border-color:rgba(255,255,255,.4);">
       📂 Buscas Salvas
     </button>
@@ -130,6 +133,9 @@
 
   <!-- ──────── ETAPA 2: Resultados CATMAT/CATSER ──────── -->
   <div id="etapa-2" class="hidden">
+    <div class="topo-nav">
+      <button class="btn btn-outline btn-voltar-topo" onclick="voltarEtapa(1)">← Voltar</button>
+    </div>
     <div class="card">
       <div class="card-title">
         <span class="icon">📋</span>
@@ -161,8 +167,7 @@
       </div>
 
       <div class="flex gap-8 mt-16">
-        <button class="btn btn-outline" onclick="voltarEtapa(1)">← Voltar</button>
-        <button class="btn btn-primary" id="btn-confirmar-cat" disabled onclick="confirmarCatmat()">
+        <button class="btn btn-primary w-full" id="btn-confirmar-cat" disabled onclick="confirmarCatmat()">
           Confirmar Seleção →
         </button>
       </div>
@@ -171,6 +176,9 @@
 
   <!-- ──────── ETAPA 3: Busca de empresas ──────── -->
   <div id="etapa-3" class="hidden">
+    <div class="topo-nav">
+      <button class="btn btn-outline btn-voltar-topo" onclick="voltarEtapa(2)">← Voltar</button>
+    </div>
     <div class="card" id="card-item-selecionado"></div>
 
     <div class="card">
@@ -253,7 +261,6 @@
 
       <small id="form-emp-aviso" class="form-aviso hidden"></small>
       <div class="flex gap-8 mt-16">
-        <button class="btn btn-outline" onclick="voltarEtapa(2)">← Voltar</button>
         <button class="btn btn-primary w-full" onclick="buscarEmpresas()" id="btn-buscar-emp">
           🏢 Buscar Empresas Fornecedoras
         </button>

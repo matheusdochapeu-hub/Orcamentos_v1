@@ -332,6 +332,18 @@ textarea { resize: vertical; min-height: 80px; }
 .btn-danger    { background: var(--vermelho); color: #fff; }
 .btn-danger:hover { background: #93351F; }
 .btn:disabled  { opacity: .5; cursor: not-allowed; pointer-events: none; }
+/* Botão "Baixar app" (PWA) — dourado, destaca no header marinho */
+.btn-instalar { background: var(--ouro); color: #10213A; font-weight: 700; }
+.btn-instalar:hover { background: var(--ouro-escuro); color: #fff; transform: translateY(-1px); }
+.btn-instalar.hidden { display: none; }
+
+/* Barra de navegação no TOPO de cada etapa (botão Voltar sempre visível em cima) */
+.topo-nav {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.btn-voltar-topo { background: var(--superficie); }
 
 /* Aviso de campo obrigatório faltando (bloqueia a busca de empresas) */
 .form-aviso {
