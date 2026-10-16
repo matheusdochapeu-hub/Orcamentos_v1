@@ -86,6 +86,9 @@ _SINONIMOS = {
     "merenda": ["merenda", "alimento", "alimenticio", "genero"],
     "agua": ["agua", "mineral", "potavel"],
     "livro": ["livro", "didatico", "literario", "obra"],
+    "tinta": ["tinta", "esmalte", "verniz"],
+    "automotiva": ["automotiva", "automotivo", "automovel", "veicular", "repintura"],
+    "automotivo": ["automotivo", "automotiva", "automovel", "veicular", "repintura"],
 }
 
 
@@ -109,46 +112,116 @@ def _palavras(texto: str, expandir: bool = False) -> list[str]:
     return expandido
 
 
+def _prefixo_comum(a: str, b: str) -> int:
+    """Nº de caracteres iniciais iguais entre a e b."""
+    n = 0
+    for ca, cb in zip(a, b):
+        if ca != cb:
+            break
+        n += 1
+    return n
+
+
+def _radical(p: str) -> str:
+    """
+    Radical aproximado de uma palavra em pt-BR: tira terminações de
+    gênero/número comuns para casar flexões (automotivo/automotiva/automotivos,
+    vermelho/vermelha, canetas/caneta). Mantém pelo menos 4 letras.
+    """
+    p = p or ""
+    if len(p) <= 4:
+        return p
+    # remove plural simples
+    if p.endswith("s") and len(p) > 4:
+        p = p[:-1]
+    # neutraliza gênero final (o/a) → corta a última vogal temática
+    if len(p) > 4 and p[-1] in "oa":
+        p = p[:-1]
+    return p[:8]
+
+
 def _match_palavra(palavra: str, tokens_item: list[str], texto_item: str) -> float:
     """
     Mede o quão bem UMA palavra da query casa com o item (0.0 a 1.0),
-    de forma TOLERANTE a erros de digitação/plural:
+    de forma TOLERANTE a erros de digitação, plural e GÊNERO:
       1.0  → palavra aparece literal no texto (substring)
-      0.9  → casa por radical com algum token (prefixo de 4+ letras)
+      0.92 → casa por radical com algum token (ignora gênero/plural:
+             automotiva↔automotivo, caneta↔canetas, vermelho↔vermelha)
       0..1 → melhor similaridade fuzzy (Levenshtein) com algum token do item,
              contando só se ficar razoavelmente parecida (>= 0.78)
     """
     if palavra in texto_item:
         return 1.0
     melhor = 0.0
-    radical = palavra[:4]
+    rad_p = _radical(palavra)
     for tok in tokens_item:
-        if len(palavra) >= 4 and len(tok) >= 4 and (tok.startswith(radical) or palavra.startswith(tok[:4])):
-            melhor = max(melhor, 0.9)
-            continue
+        # Casamento por radical nos dois sentidos (gênero/plural/variação:
+        # automotiva↔automotivo, caneta↔canetas). Para NÃO casar palavras só
+        # porque começam igual (automotiva↔automatico, tinta↔tinteiro),
+        # exigimos que o prefixo comum cubra uma fração relevante da palavra
+        # MAIS CURTA — flexões diferem no fim, não no começo.
+        rad_t = _radical(tok)
+        if len(rad_p) >= 4 and len(rad_t) >= 4:
+            comum = _prefixo_comum(rad_p, rad_t)
+            # Flexões (automotiva/automotivo) compartilham quase o radical
+            # inteiro; palavras só com começo igual (tinta/tinteiro) não. Exige
+            # que o prefixo comum cubra ~72% da palavra MAIS LONGA.
+            longa = max(len(rad_p), len(rad_t))
+            if comum >= 4 and comum / longa >= 0.72:
+                melhor = max(melhor, 0.92)
+                continue
         r = lev_ratio(palavra, tok)
         if r >= 0.78:                      # tolera ~1-2 letras trocadas
             melhor = max(melhor, r)
     return melhor
 
 
+def _peso_palavra(p: str) -> float:
+    """
+    Peso de uma palavra na query. Palavras mais longas (geralmente o núcleo
+    semântico, ex.: 'automotiva') pesam um pouco mais, mas NUNCA tanto a ponto
+    de uma só palavra decidir sozinha o resultado — todas contribuem.
+    """
+    return 1.0 + min(len(p), 12) / 20.0   # 3 letras≈1.15 … 12+ letras≈1.6
+
+
 def _calcular_score(query_norm: str, palavras_query: list[str],
                     texto_item: str) -> float:
     """
     Score de relevância (0.0 a 1.0), TOLERANTE a erros. Combina:
-      - cobertura: soma dos matches (fuzzy) das palavras da query / nº palavras (70%)
-      - frente:    bônus se o item COMEÇA com a 1ª palavra da query (10%)
-      - sequência: similaridade de sequência query × item (20%)
+      - cobertura PONDERADA: cada palavra da query casa parcialmente (fuzzy) e
+        contribui conforme seu peso; palavras longas pesam mais, mas todas
+        somam. Assim 'tinta automotiva' pontua MAIS que só 'tinta' no item
+        certo, sem EXCLUIR o item quando uma das palavras varia de forma. (72%)
+      - frente:    bônus se o item COMEÇA com alguma palavra da query (10%)
+      - sequência: similaridade de sequência query × item (18%)
     """
     if not palavras_query:
         return 0.0
     alvo = _norm(texto_item)
     tokens_item = alvo.split()
-    soma = sum(_match_palavra(p, tokens_item, alvo) for p in palavras_query)
-    s_cov = soma / len(palavras_query)
-    s_front = 1.0 if alvo.startswith(palavras_query[0]) else 0.0
+    soma_peso = sum(_peso_palavra(p) for p in palavras_query) or 1.0
+    soma = sum(_match_palavra(p, tokens_item, alvo) * _peso_palavra(p)
+               for p in palavras_query)
+    s_cov = soma / soma_peso
+    s_front = 1.0 if any(alvo.startswith(p) for p in palavras_query[:2]) else 0.0
     s_seq = lev_ratio(query_norm[:60], alvo[:60])
-    return round(s_cov * 0.70 + s_front * 0.10 + s_seq * 0.20, 4)
+    return round(s_cov * 0.72 + s_front * 0.10 + s_seq * 0.18, 4)
+
+
+def _cobertura(palavras_query: list[str], texto_item: str) -> float:
+    """
+    Fração (0..1) das palavras significativas da query que casam o item
+    (match >= 0.6). Usada como filtro PROPORCIONAL em vez do antigo filtro
+    binário de 'palavra obrigatória única'. Tolera o usuário errar/omitir uma
+    palavra: exige-se apenas que uma FRAÇÃO case, não todas nem uma específica.
+    """
+    if not palavras_query:
+        return 0.0
+    alvo = _norm(texto_item)
+    tokens = alvo.split()
+    casam = sum(1 for p in palavras_query if _match_palavra(p, tokens, alvo) >= 0.6)
+    return casam / len(palavras_query)
 
 
 def _montar_resultado_material(cod, nome_pdm, desc, score) -> dict:
@@ -194,9 +267,12 @@ async def _buscar_online(tipo: str, texto_busca: str,
     if not palavras_q:
         return []
 
-    # Termo enviado à API: usa as palavras originais (sem sinônimos, p/ não
-    # confundir o filtro do governo). O ranqueamento local é que usa sinônimos.
-    termo = " ".join(palavras_base[:6])
+    # Termo enviado à API: usa as palavras mais DISTINTIVAS (as mais longas
+    # tendem a ser o núcleo e os qualificadores; stopwords já foram removidas).
+    # Sem sinônimos, p/ não confundir o filtro do governo — o ranqueamento
+    # local é que usa sinônimos. Mantém a ordem original para legibilidade.
+    _top = set(sorted(palavras_base, key=len, reverse=True)[:6])
+    termo = " ".join(p for p in palavras_base if p in _top)
 
     if tipo == "material":
         endpoint = f"{BASE_API}/modulo-material/4_consultarItemMaterial"
@@ -206,18 +282,24 @@ async def _buscar_online(tipo: str, texto_busca: str,
         endpoint = f"{BASE_API}/modulo-servico/6_consultarItemServico"
         chaves_param = ["nomeServico", "descricao", "termo"]
 
-    # Palavra(s) OBRIGATÓRIA(S): a mais significativa da query (a mais longa) +
-    # suas variações/sinônimos. Um item só entra se casar PELO MENOS uma delas —
-    # isso evita que uma resposta não-filtrada da API vire "resultado aleatório".
-    principal = max(palavras_base, key=len) if palavras_base else (palavras_base[0] if palavras_base else "")
-    obrigatorias = set([principal] + _SINONIMOS.get(principal, []))
-    obrigatorias = {o for o in obrigatorias if len(o) >= 3}
-
-    def _item_casa_obrigatoria(texto_item_norm: str, tokens: list[str]) -> bool:
-        for o in obrigatorias:
-            if _match_palavra(o, tokens, texto_item_norm) >= 0.85:
-                return True
-        return False
+    # Filtro PROPORCIONAL (substitui o antigo "palavra obrigatória única").
+    # Em vez de exigir UMA palavra específica (a mais longa) — que excluía o
+    # item certo quando o catálogo usava outra flexão (ex.: 'automotivo' vs
+    # 'automotiva') — exigimos que uma FRAÇÃO mínima das palavras da query case.
+    # Assim 'tinta automotiva' encontra o item mesmo que só 'tinta' bata forte,
+    # e quem casa as duas pontua mais e sobe no ranking.
+    #   - 1 palavra  → precisa casar ela (cobertura 1.0).
+    #   - 2 palavras → basta casar 1 (cobertura >= 0.5) para entrar; o score
+    #                  depois ordena os que casam as duas no topo.
+    #   - 3+ palavras→ exige ~metade (tolera o usuário errar/omitir termos).
+    palavras_sig = palavras_base or palavras_q
+    n_sig = len(palavras_sig)
+    if n_sig <= 1:
+        cobertura_min = 0.99
+    elif n_sig == 2:
+        cobertura_min = 0.5
+    else:
+        cobertura_min = 0.45
 
     resultados: list[dict] = []
     async with httpx.AsyncClient(
@@ -236,7 +318,7 @@ async def _buscar_online(tipo: str, texto_busca: str,
                     continue
 
                 parciais: list[dict] = []
-                casam_obrig = 0
+                casam_algo = 0   # itens que casam ALGUMA palavra significativa
                 for item in itens:
                     if tipo == "material":
                         cod = item.get("codigoItem", "")
@@ -252,21 +334,19 @@ async def _buscar_online(tipo: str, texto_busca: str,
                         texto = f"{nome_srv} {nome_cls} {nome_grp}"
                         montar = lambda s: _montar_resultado_servico(cod, nome_srv, nome_cls, nome_grp, s)
 
-                    alvo = _norm(texto)
-                    tokens = alvo.split()
-                    casa_obrig = _item_casa_obrigatoria(alvo, tokens)
-                    if casa_obrig:
-                        casam_obrig += 1
+                    cob = _cobertura(palavras_sig, texto)
                     score = _calcular_score(query_norm, palavras_q, texto)
-                    # SÓ entra se casar a palavra principal (ou sinônimo). Isso
-                    # corta o "ruído" de respostas que a API não filtrou.
-                    if casa_obrig and score >= _LIMIAR:
+                    # Entra se casar a FRAÇÃO mínima de palavras E tiver score útil.
+                    if cob >= cobertura_min and score >= _LIMIAR:
+                        casam_algo += 1
                         parciais.append(montar(score))
 
-                # Heurística anti-ruído: se quase NENHUM item casou a palavra
-                # principal, a API provavelmente ignorou este parâmetro (devolveu
-                # catálogo genérico). Descarta e tenta o próximo parâmetro.
-                fracao = casam_obrig / max(len(itens), 1)
+                # Heurística anti-ruído: se quase nenhum item ATENDEU o filtro
+                # (cobertura mínima), a API provavelmente ignorou este parâmetro
+                # e devolveu catálogo genérico — descarta e tenta o próximo nome
+                # de parâmetro. Conta no MESMO critério de entrada (não em "casou
+                # qualquer palavra"), senão um dump genérico passaria batido.
+                fracao = casam_algo / max(len(itens), 1)
                 if fracao < 0.03 and len(itens) >= 20:
                     continue
 
@@ -400,13 +480,12 @@ def _buscar_no_cache(tipo: str, query: str, descricao: str,
     termos = termos[:10]
     like_params = [f"%{t}%" for t in termos]
 
-    # Palavra principal obrigatória (igual à busca online), para não devolver ruído.
+    # Filtro PROPORCIONAL (igual à busca online): exige uma FRAÇÃO mínima das
+    # palavras da query, não uma palavra específica. Tolera flexão/erro/omissão.
     palavras_base = _palavras(texto_busca)
-    principal = max(palavras_base, key=len) if palavras_base else ""
-    obrigatorias = {o for o in [principal] + _SINONIMOS.get(principal, []) if len(o) >= 3}
-
-    def _casa_obrig(alvo, tokens):
-        return any(_match_palavra(o, tokens, alvo) >= 0.85 for o in obrigatorias)
+    palavras_sig = palavras_base or palavras_q
+    n_sig = len(palavras_sig)
+    cobertura_min = 0.99 if n_sig <= 1 else (0.5 if n_sig == 2 else 0.45)
 
     if tipo == "material":
         where = " OR ".join(
@@ -417,10 +496,10 @@ def _buscar_no_cache(tipo: str, query: str, descricao: str,
             like_params,
         ).fetchall()
         for cod, nome_pdm, desc in rows:
-            alvo = _norm(f"{nome_pdm} {desc}"); tokens = alvo.split()
-            if obrigatorias and not _casa_obrig(alvo, tokens):
+            texto = f"{nome_pdm} {desc}"
+            if _cobertura(palavras_sig, texto) < cobertura_min:
                 continue
-            score = _calcular_score(query_norm, palavras_q, f"{nome_pdm} {desc}")
+            score = _calcular_score(query_norm, palavras_q, texto)
             if score >= _LIMIAR:
                 resultados.append(_montar_resultado_material(cod, nome_pdm, desc, score))
     else:
@@ -433,11 +512,10 @@ def _buscar_no_cache(tipo: str, query: str, descricao: str,
             like_params,
         ).fetchall()
         for cod, nome_srv, nome_cls, nome_grp in rows:
-            alvo = _norm(f"{nome_srv} {nome_cls} {nome_grp}"); tokens = alvo.split()
-            if obrigatorias and not _casa_obrig(alvo, tokens):
+            texto = f"{nome_srv} {nome_cls} {nome_grp}"
+            if _cobertura(palavras_sig, texto) < cobertura_min:
                 continue
-            score = _calcular_score(query_norm, palavras_q,
-                                    f"{nome_srv} {nome_cls} {nome_grp}")
+            score = _calcular_score(query_norm, palavras_q, texto)
             if score >= _LIMIAR:
                 resultados.append(
                     _montar_resultado_servico(cod, nome_srv, nome_cls, nome_grp, score)

@@ -50,6 +50,13 @@ async def buscar_empresas(req: BuscaEmpresasRequest):
     if not req.cidade.strip():
         raise HTTPException(400, "Cidade não pode ser vazia")
 
+    # Estado (UF) é necessário para resolver o município (código IBGE) e filtrar
+    # as empresas na região certa. Sem ele a busca falharia só lá no fim, sem
+    # resultado — então recusamos cedo, com mensagem clara (o frontend também
+    # bloqueia o botão, isto protege chamadas diretas à API / embed).
+    if not (req.estado or "").strip():
+        raise HTTPException(400, "Selecione o estado (UF) antes de buscar")
+
     # Chave do Google: continua opcional e vem do usuário (exige cartão no Google).
     if req.maps_key and req.maps_key.strip():
         os.environ["GOOGLE_MAPS_API_KEY"] = req.maps_key.strip()

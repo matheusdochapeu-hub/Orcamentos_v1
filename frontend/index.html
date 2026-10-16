@@ -251,6 +251,7 @@
         </div>
       </div>
 
+      <small id="form-emp-aviso" class="form-aviso hidden"></small>
       <div class="flex gap-8 mt-16">
         <button class="btn btn-outline" onclick="voltarEtapa(2)">← Voltar</button>
         <button class="btn btn-primary w-full" onclick="buscarEmpresas()" id="btn-buscar-emp">
@@ -322,6 +323,11 @@
       <button class="modal-close" onclick="fecharModal('modal-config')">✕</button>
     </div>
 
+    <!-- Ações no TOPO do modal (acesso rápido) -->
+    <div class="modal-acoes">
+      <button class="btn btn-primary w-full" onclick="salvarConfig()">💾 Salvar Configurações</button>
+    </div>
+
     <div class="config-row">
       <span>🗺️</span>
       <label>Google Maps API Key <small style="color:var(--texto-leve);font-weight:400">(opcional)</small></label>
@@ -346,10 +352,7 @@
       </label>
     </div>
 
-    <div class="flex gap-8 mt-16">
-      <button class="btn btn-primary w-full" onclick="salvarConfig()">💾 Salvar Configurações</button>
-    </div>
-    <p style="font-size:.75rem;color:var(--texto-leve);margin-top:10px;text-align:center">
+    <p style="font-size:.75rem;color:var(--texto-leve);margin-top:16px;text-align:center">
       A chave é salva apenas no seu navegador (localStorage), não é enviada ao servidor.
     </p>
   </div>
