@@ -109,6 +109,14 @@ async def _municipios_da_uf(uf: str) -> list[dict]:
         return []
 
 
+async def listar_municipios(uf: str) -> list[str]:
+    """Lista (ordenada) os nomes de municípios de uma UF. [] se falhar."""
+    municipios = await _municipios_da_uf(uf)
+    nomes = sorted((m.get("nome", "") for m in municipios if m.get("nome")),
+                   key=lambda n: _norm(n))
+    return nomes
+
+
 async def codigo_municipio(cidade: str, uf: str) -> int | None:
     """
     Converte 'cidade' + 'uf' no código IBGE (int). None se não encontrar.
