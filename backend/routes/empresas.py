@@ -70,6 +70,21 @@ async def buscar_empresas(req: BuscaEmpresasRequest):
     except Exception as e:
         raise HTTPException(502, f"Erro ao buscar empresas: {str(e)}")
 
+    # Enriquecimento via OpenStreetMap: completa telefone/site/horário das
+    # empresas (Receita/PNCP) cruzando por nome + proximidade. Grátis, sem chave;
+    # degrada em silêncio.
+    try:
+        from services.empresas.osm import enriquecer as enriquecer_osm, OSM_ENABLED
+        if OSM_ENABLED:
+            resultado["empresas"] = await enriquecer_osm(
+                resultado["empresas"],
+                cidade=req.cidade.strip(),
+                estado=(req.estado or "").strip(),
+                raio_km=req.raio_km,
+            )
+    except Exception as e:
+        print(f"[OSM enriquecer] ignorado: {e}")
+
     empresas = classificar_empresas(
         empresas=resultado["empresas"],
         nome_item=req.nome_item,

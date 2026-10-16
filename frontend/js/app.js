@@ -457,6 +457,14 @@ function cardEmpresa(emp) {
     ? `<div class="empresa-cnpj">🧾 CNPJ: ${escapeHtml(emp.cnpj)}${emp.situacao ? ` · <span class="emp-situacao">${escapeHtml(emp.situacao)}</span>` : ''}</div>` : '';
   const cnaeLinha = emp.cnae_principal
     ? `<div class="empresa-cnae">🏷️ CNAE ${escapeHtml(emp.cnae_principal)}${emp.cnae_descricao ? ` — ${escapeHtml(emp.cnae_descricao)}` : ''}</div>` : '';
+  const horarioLinha = emp.horario
+    ? `<div class="empresa-horario">🕒 ${escapeHtml(emp.horario)}</div>` : '';
+  // Indicador de origem/complemento pelo mapa (OpenStreetMap)
+  const osmBadge = emp.fonte === 'osm'
+    ? `<span class="emp-mapa" title="Estabelecimento encontrado no mapa (OpenStreetMap)">🗺️ do mapa</span>`
+    : (emp.enriquecido_osm
+        ? `<span class="emp-mapa" title="Contato complementado pelo mapa (OpenStreetMap)">🗺️ contato do mapa</span>`
+        : '');
 
   const extras = [tel2, wpp, site, email].filter(Boolean).join('');
 
@@ -464,7 +472,7 @@ function cardEmpresa(emp) {
     <div class="empresa-card">
       <div class="empresa-header">
         <div>
-          <div class="empresa-nome">${escapeHtml(nome)} ${distBadge}</div>
+          <div class="empresa-nome">${escapeHtml(nome)} ${distBadge} ${osmBadge}</div>
           ${fornecBadge}
           ${sancaoBadge}
           ${subRazao}
@@ -474,6 +482,7 @@ function cardEmpresa(emp) {
       <div class="empresa-endereco">📍 ${escapeHtml(emp.endereco || '—')}</div>
       ${cnpjLinha}
       ${cnaeLinha}
+      ${horarioLinha}
       ${stars ? `<div class="empresa-avaliacao">${stars} (${emp.total_avaliacoes || 0} avaliações)</div>` : ''}
       ${telBloco}
       ${extras ? `<div class="empresa-contatos">${extras}</div>` : ''}

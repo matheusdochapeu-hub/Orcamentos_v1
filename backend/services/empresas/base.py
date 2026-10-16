@@ -34,6 +34,8 @@ def empresa_vazia() -> dict:
         "whatsapp": "",
         "email": "",
         "site": "",
+        "horario": "",            # horário de funcionamento (OSM)
+        "enriquecido_osm": False, # True se teve contato completado pelo OSM
         # Atividade / classificação
         "cnae_principal": "",
         "cnae_descricao": "",

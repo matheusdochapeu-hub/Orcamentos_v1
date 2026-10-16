@@ -418,6 +418,20 @@ textarea { resize: vertical; min-height: 80px; }
   border-radius: 999px;
 }
 
+/* Indicador de dado vindo do mapa (OpenStreetMap) */
+.emp-mapa {
+  display: inline-block;
+  font-size: .68rem;
+  font-weight: 700;
+  color: #3730a3;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  padding: 1px 8px;
+  border-radius: 999px;
+  vertical-align: middle;
+}
+.empresa-horario { font-size: .8rem; color: var(--texto-leve); margin-top: 4px; }
+
 /* Alerta: empresa impedida de contratar (CEIS/CNEP) */
 .emp-sancao {
   display: inline-block;

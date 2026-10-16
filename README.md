@@ -63,6 +63,13 @@ nada. As fontes são:
 
 ### Cruzamentos adicionais de dados
 
+- **OpenStreetMap (mapa) — grátis, sem chave:** cruza os resultados com o
+  **OpenStreetMap** via a Overpass API (pública, sem chave, sem cartão). Faz
+  duas coisas: **(1) descoberta** — traz estabelecimentos do mapa que casam com
+  o produto na região (marcados com 🗺️ "do mapa"), com telefone/site/horário; e
+  **(2) enriquecimento** — completa telefone/site/horário das empresas da
+  Receita/PNCP que estavam sem contato, cruzando por nome + proximidade
+  (marcado com 🗺️ "contato do mapa"). Ligado por padrão; `OSM_ENABLED=0` desliga.
 - **CNAEs secundários:** além da atividade principal, o sistema cruza os
   **CNAEs secundários** da empresa com o item buscado — uma empresa de "comércio
   geral" com secundário de "móveis/estofados" sobe na relevância.
