@@ -21,10 +21,12 @@ import asyncio
 from services.empresas.receita_cnpj import ProvedorReceita
 from services.empresas.google_maps import ProvedorGoogle
 from services.empresas.pncp import ProvedorPNCP
+from services.empresas.osm import ProvedorOSM
 
 _PROVEDORES = {
     "pncp": ProvedorPNCP(),
     "receita": ProvedorReceita(),
+    "osm": ProvedorOSM(),
     "google": ProvedorGoogle(),
 }
 
@@ -32,10 +34,10 @@ _PROVEDORES = {
 def _resolver_fontes(fontes: str) -> list[str]:
     f = (fontes or "ambas").strip().lower()
     if f in ("ambas", "todas", "both", "hibrido", "híbrido"):
-        return ["pncp", "receita", "google"]
+        return ["pncp", "receita", "osm", "google"]
     if f in _PROVEDORES:
         return [f]
-    return ["pncp", "receita"]  # padrão seguro = híbrido de alta precisão
+    return ["pncp", "receita", "osm"]  # padrão seguro = híbrido
 
 
 def _chave_dedup(emp: dict) -> str:
@@ -107,10 +109,10 @@ async def buscar_empresas_agregado(
     # Processa na ordem de 'ativos' (pncp primeiro → alta confiança tem prioridade)
     for nome, res in zip(ativos, resultados):
         if isinstance(res, Exception):
-            # PNCP é complemento de precisão: não deve incomodar o usuário se
-            # falhar. Só mostramos ⚠️ para a Receita (fonte principal).
-            if nome == "pncp":
-                avisos.append(f"[interno] PNCP indisponível: {res}")
+            # PNCP e OSM são complementos: não incomodam o usuário se falharem.
+            # Só mostramos ⚠️ para a Receita (fonte principal).
+            if nome in ("pncp", "osm"):
+                avisos.append(f"[interno] {nome} indisponível: {res}")
             else:
                 avisos.append(f"⚠️ {res}")
             continue
