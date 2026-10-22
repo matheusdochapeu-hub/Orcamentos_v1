@@ -33,11 +33,20 @@ function obterApiUrl() {
 
 let API = obterApiUrl();
 
-// Faz fetch + parse de JSON de forma DEFENSIVA. Se a resposta vier vazia (ex.:
-// o servidor/proxy cortou um request longo e devolveu corpo vazio), em vez de
-// quebrar com "Unexpected end of JSON input" lançamos uma mensagem clara.
 async function fetchJson(url, opcoes) {
-  const resp = await fetch(url, opcoes);
+  let resp;
+  try {
+    resp = await fetch(url, opcoes);
+  } catch (err) {
+    const isGH = window.location.hostname.endsWith('github.io') || window.location.hostname.endsWith('github.dev');
+    if (isGH) {
+      throw new Error(`Não foi possível conectar ao backend (${API}). O GitHub Pages hospeda apenas a interface estática e necessita de um servidor Python ativo (Fly.io/Render). Configure a URL em ⚙️ Configurações.`);
+    }
+    if (window.location.protocol === 'file:') {
+      throw new Error('Você abriu o arquivo HTML diretamente (file://). Inicie o sistema pelo INICIAR_SERVIDOR.bat para conectar ao backend.');
+    }
+    throw new Error(`Falha de conexão com o servidor em ${API}. Verifique se o backend está ativo.`);
+  }
   const texto = await resp.text();
   let data = null;
   if (texto) {
