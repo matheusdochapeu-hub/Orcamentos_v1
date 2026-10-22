@@ -4,14 +4,14 @@
      para abrir rápido e funcionar mesmo com conexão ruim.
    - API (/api/...): SEMPRE rede (nunca cacheia) — os dados precisam ser atuais.
 */
-const CACHE = 'orcamentos-shell-v2';
+const CACHE = 'orcamentos-shell-v3';
 const SHELL = [
-  '/',
-  '/static/css/style.css',
-  '/static/js/app.js',
-  '/manifest.webmanifest',
-  '/static/icons/icon-192.png',
-  '/static/icons/icon-512.png',
+  './',
+  'css/style.css',
+  'js/app.js',
+  'manifest.webmanifest',
+  'icons/icon-192.png',
+  'icons/icon-512.png',
 ];
 
 self.addEventListener('install', (event) => {

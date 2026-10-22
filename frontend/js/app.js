@@ -15,7 +15,23 @@ const ESTADO = {
   buscaId: null,
 };
 
-const API = window.location.origin;
+// Determina a URL base da API do backend.
+// 1. Prioridade para configuração salva no navegador (localStorage: backend_url).
+// 2. Se rodando no GitHub Pages (*.github.io ou *.github.dev), conecta ao backend remoto (Fly.io).
+// 3. Em ambiente local ou servidor integrado, usa a própria origem (window.location.origin).
+function obterApiUrl() {
+  const custom = localStorage.getItem('backend_url');
+  if (custom && custom.trim()) {
+    return custom.trim().replace(/\/+$/, '');
+  }
+  const host = window.location.hostname;
+  if (host.endsWith('github.io') || host.endsWith('github.dev')) {
+    return 'https://orcamentos-publicos.fly.dev';
+  }
+  return window.location.origin;
+}
+
+let API = obterApiUrl();
 
 // Faz fetch + parse de JSON de forma DEFENSIVA. Se a resposta vier vazia (ex.:
 // o servidor/proxy cortou um request longo e devolveu corpo vazio), em vez de
@@ -139,7 +155,7 @@ function validarFormEmpresas() {
 function registrarPWA() {
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js').catch(err =>
+      navigator.serviceWorker.register('./sw.js').catch(err =>
         console.warn('SW não registrado:', err)
       );
     });
@@ -843,12 +859,24 @@ async function excluirBusca(id, btn) {
 
 function abrirModalConfig() {
   document.getElementById('config-maps-key').value = localStorage.getItem('maps_key') || '';
+  const backendInput = document.getElementById('config-backend-url');
+  if (backendInput) {
+    backendInput.value = localStorage.getItem('backend_url') || '';
+  }
   document.getElementById('modal-config').classList.add('aberto');
   history.pushState({ modal: 'modal-config', etapa: ESTADO.etapaAtual }, '', '#config');
 }
 
 function salvarConfig() {
   const mapsKey = document.getElementById('config-maps-key').value.trim();
+  const backendInput = document.getElementById('config-backend-url');
+
+  if (backendInput) {
+    const backendVal = backendInput.value.trim().replace(/\/+$/, '');
+    if (backendVal) localStorage.setItem('backend_url', backendVal);
+    else localStorage.removeItem('backend_url');
+    API = obterApiUrl();
+  }
 
   if (mapsKey && (!mapsKey.startsWith('AIza') || mapsKey.length < 35)) {
     toast('❌ Google Maps Key inválida! Deve começar com "AIza" e ter ~39 caracteres.', 'error');

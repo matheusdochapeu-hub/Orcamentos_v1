@@ -4,17 +4,17 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Sistema de Orçamentos Públicos</title>
-  <link rel="stylesheet" href="/static/css/style.css" />
+  <link rel="stylesheet" href="css/style.css" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>" />
 
   <!-- PWA (instalável como app) -->
-  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#10213A" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Orçamentos" />
-  <link rel="apple-touch-icon" href="/static/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
 </head>
 <body>
 
@@ -351,6 +351,17 @@
       </small>
     </div>
 
+    <div class="config-row">
+      <span>🌐</span>
+      <label>Servidor da API (Backend) <small style="color:var(--texto-leve);font-weight:400">(opcional)</small></label>
+    </div>
+    <div class="form-group">
+      <input type="url" id="config-backend-url" placeholder="Ex: https://orcamentos-publicos.fly.dev" />
+      <small style="color:var(--texto-leve);font-size:.78rem">
+        Necessário apenas ao executar pelo <strong>GitHub Pages</strong> ou servidor estático separado. Em execução local ou servidor unificado, deixe em branco.
+      </small>
+    </div>
+
     <div class="config-row" style="background:var(--ouro-claro);border-color:#e3d3a8">
       <span>🧭</span>
       <label style="font-weight:400;font-size:.82rem;color:var(--texto)">
@@ -360,7 +371,7 @@
     </div>
 
     <p style="font-size:.75rem;color:var(--texto-leve);margin-top:16px;text-align:center">
-      A chave é salva apenas no seu navegador (localStorage), não é enviada ao servidor.
+      As configurações são salvas apenas no seu navegador (localStorage).
     </p>
   </div>
 </div>
@@ -368,6 +379,6 @@
 <!-- ═══════════════════ TOAST CONTAINER ═══════════════════ -->
 <div class="toast-container" id="toast-container"></div>
 
-<script src="/static/js/app.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>
