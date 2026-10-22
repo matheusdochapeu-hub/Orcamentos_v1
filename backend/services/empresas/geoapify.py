@@ -107,13 +107,13 @@ def _para_empresa(feat: dict) -> dict:
 class ProvedorGeoapify(ProvedorEmpresas):
     nome = "geoapify"
 
-    def disponivel(self) -> bool:
-        return bool(_chave_usuario())
+    def disponivel(self, geoapify_key: str = "") -> bool:
+        return bool(geoapify_key or _chave_usuario())
 
     async def buscar(self, *, nome_item, codigo_cat, tipo_cat, tipo_busca,
                      cidade, estado, raio_km, lat=None, lng=None,
-                     max_empresas=50, **kwargs) -> list[dict]:
-        chave = _chave_usuario()
+                     max_empresas=50, geoapify_key: str = "", **kwargs) -> list[dict]:
+        chave = geoapify_key or kwargs.get("geoapify_key", "") or _chave_usuario()
         if not chave:
             return []
         palavras_item = _palavras(f"{nome_item} {kwargs.get('descricao','')}")

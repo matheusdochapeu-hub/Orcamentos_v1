@@ -38,11 +38,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — permite acesso de qualquer origem (ajustar em produção)
+# CORS — em conformidade com especificação W3C (não combina '*' com credentials)
+_ALLOWED_ORIGINS_RAW = os.getenv("ALLOWED_ORIGINS", "").strip()
+if _ALLOWED_ORIGINS_RAW:
+    _ALLOWED_ORIGINS = [orig.strip() for orig in _ALLOWED_ORIGINS_RAW.split(",") if orig.strip()]
+    _ALLOW_CREDENTIALS = True
+else:
+    _ALLOWED_ORIGINS = ["*"]
+    _ALLOW_CREDENTIALS = False
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_ALLOWED_ORIGINS,
+    allow_credentials=_ALLOW_CREDENTIALS,
     allow_methods=["*"],
     allow_headers=["*"],
 )

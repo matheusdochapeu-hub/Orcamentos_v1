@@ -57,17 +57,11 @@ async def buscar_empresas(req: BuscaEmpresasRequest):
     if not (req.estado or "").strip():
         raise HTTPException(400, "Selecione o estado (UF) antes de buscar")
 
-    # Chave do Google: continua opcional e vem do usuário (exige cartão no Google).
-    if req.maps_key and req.maps_key.strip():
-        os.environ["GOOGLE_MAPS_API_KEY"] = req.maps_key.strip()
-
-    # Chave do Geoapify: é FIXA no servidor (variável de ambiente GEOAPIFY_API_KEY),
-    # usada como motor de busca para todos os usuários — eles não a veem nem a
-    # informam. Só aceitamos uma chave vinda do cliente se o servidor NÃO tiver
-    # uma configurada (ex.: ambiente de desenvolvimento local).
-    if not (os.getenv("GEOAPIFY_API_KEY") or "").strip():
-        if req.geoapify_key and req.geoapify_key.strip():
-            os.environ["GEOAPIFY_API_KEY"] = req.geoapify_key.strip()
+    # Chaves de API tratadas de forma contextual e isolada (sem poluir os.environ):
+    chave_maps = req.maps_key.strip() if req.maps_key else os.getenv("GOOGLE_MAPS_API_KEY", "")
+    chave_geo = os.getenv("GEOAPIFY_API_KEY", "")
+    if not chave_geo and req.geoapify_key:
+        chave_geo = req.geoapify_key.strip()
 
     try:
         resultado = await buscar_empresas_agregado(
@@ -80,6 +74,8 @@ async def buscar_empresas(req: BuscaEmpresasRequest):
             raio_km=req.raio_km,
             fontes=req.fontes or "ambas",
             max_empresas=50,
+            maps_key=chave_maps,
+            geoapify_key=chave_geo,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -93,8 +89,7 @@ async def buscar_empresas(req: BuscaEmpresasRequest):
     try:
         from services.empresas.osm import enriquecer as enriquecer_osm, OSM_ENABLED
         if OSM_ENABLED:
-            # Limite próprio: o enriquecimento é um "extra"; se demorar, segue
-            # sem ele (não pode atrasar a resposta ao usuário).
+            # Limite próprio reduzido para não atrasar a resposta ao usuário.
             resultado["empresas"] = await asyncio.wait_for(
                 enriquecer_osm(
                     resultado["empresas"],
@@ -102,7 +97,7 @@ async def buscar_empresas(req: BuscaEmpresasRequest):
                     estado=(req.estado or "").strip(),
                     raio_km=req.raio_km,
                 ),
-                timeout=18.0,
+                timeout=5.0,
             )
     except asyncio.TimeoutError:
         print("[OSM enriquecer] tempo excedido — seguindo sem enriquecimento")
@@ -121,7 +116,7 @@ async def buscar_empresas(req: BuscaEmpresasRequest):
     try:
         from services.sancoes import marcar_sancoes, habilitado
         if habilitado():
-            empresas = await asyncio.wait_for(marcar_sancoes(empresas), timeout=15.0)
+            empresas = await asyncio.wait_for(marcar_sancoes(empresas), timeout=4.0)
     except asyncio.TimeoutError:
         print("[Sancoes] tempo excedido — seguindo sem verificação de sanções")
     except Exception as e:

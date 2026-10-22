@@ -7,9 +7,15 @@ from pydantic import BaseModel
 from typing import Optional
 import io
 import json
+import re
 from datetime import datetime
 
 router = APIRouter(prefix="/api/export", tags=["Exportação"])
+
+
+def _sanitizar_nome_arquivo(nome: str) -> str:
+    """Sanitiza o nome do arquivo para o cabeçalho Content-Disposition."""
+    return re.sub(r'[^a-zA-Z0-9_.-]', '_', nome)
 
 
 class ExportRequest(BaseModel):
@@ -158,7 +164,8 @@ async def exportar_excel(req: ExportRequest):
     wb.save(output)
     output.seek(0)
 
-    nome_arquivo = f"orcamento_{req.catcodigo}_{req.cidade}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    nome_base = f"orcamento_{req.catcodigo}_{req.cidade}_{datetime.now().strftime('%Y%m%d_%H%M')}"
+    nome_arquivo = f"{_sanitizar_nome_arquivo(nome_base)}.xlsx"
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -301,7 +308,8 @@ async def exportar_pdf(req: ExportRequest):
     doc.build(elementos)
     output.seek(0)
 
-    nome_arquivo = f"orcamento_{req.catcodigo}_{req.cidade}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    nome_base = f"orcamento_{req.catcodigo}_{req.cidade}_{datetime.now().strftime('%Y%m%d_%H%M')}"
+    nome_arquivo = f"{_sanitizar_nome_arquivo(nome_base)}.pdf"
     return StreamingResponse(
         output,
         media_type="application/pdf",

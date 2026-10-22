@@ -10,22 +10,42 @@ echo.
 echo  Iniciando servidor...
 echo.
 
-set PYTHON=C:\Users\matheus.ribeiro\AppData\Local\Programs\Python\Python314\python.exe
 set PYTHONIOENCODING=utf-8
+set "PY_CMD="
 
-:: Verifica se Python existe
-if not exist "%PYTHON%" (
-    echo  [ERRO] Python nao encontrado em: %PYTHON%
-    echo  Verifique a instalacao do Python 3.14.
+:: 1. Tenta inicializador oficial py -3
+py -3 --version >nul 2>&1
+if not errorlevel 1 (
+    set "PY_CMD=py -3"
+    goto :PYTHON_OK
+)
+
+:: 2. Tenta comando python no PATH
+python --version >nul 2>&1
+if not errorlevel 1 (
+    set "PY_CMD=python"
+    goto :PYTHON_OK
+)
+
+:: 3. Fallback para caminho local padrão
+if exist "%LOCALAPPDATA%\Programs\Python\Python314\python.exe" (
+    set "PY_CMD=%LOCALAPPDATA%\Programs\Python\Python314\python.exe"
+    goto :PYTHON_OK
+)
+
+:PYTHON_OK
+if "%PY_CMD%"=="" (
+    echo  [ERRO] Python nao encontrado no sistema.
+    echo  Verifique se o Python 3.10+ esta instalado e adicionado ao PATH.
     pause
     exit /b 1
 )
 
 :: Verifica dependencias
-"%PYTHON%" -c "import fastapi, uvicorn, aiosqlite, httpx" 2>nul
+%PY_CMD% -c "import fastapi, uvicorn, aiosqlite, httpx" 2>nul
 if errorlevel 1 (
     echo  [INFO] Instalando dependencias (aguarde)...
-    "%PYTHON%" -m pip install fastapi "uvicorn[standard]" httpx python-dotenv aiosqlite openpyxl reportlab python-multipart unidecode
+    %PY_CMD% -m pip install fastapi "uvicorn[standard]" httpx python-dotenv aiosqlite openpyxl reportlab python-multipart unidecode
     echo.
 )
 
@@ -41,6 +61,6 @@ echo  CATMAT/CATSER do governo (~5 minutos). Nas proximas buscas sera instantane
 echo.
 
 cd /d "%~dp0backend"
-"%PYTHON%" -m uvicorn main:app --host 0.0.0.0 --port 8000
+%PY_CMD% -m uvicorn main:app --host 0.0.0.0 --port 8000
 
 pause

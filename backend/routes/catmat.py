@@ -66,13 +66,17 @@ async def recarregar_cache(tipo: str = "material"):
     """
     from services.governo_api import _popular_cache, CACHE_DB
     import sqlite3
-    if tipo not in ("material", "servico"):
+    TABELAS_VALIDAS = {"material": "catmat", "servico": "catser"}
+    tabela = TABELAS_VALIDAS.get(tipo)
+    if not tabela:
         raise HTTPException(400, "Tipo deve ser 'material' ou 'servico'")
     # Limpa o cache antigo para esse tipo
-    tabela = "catmat" if tipo == "material" else "catser"
     try:
         con = sqlite3.connect(CACHE_DB)
-        con.execute(f"DELETE FROM {tabela}")
+        if tabela == "catmat":
+            con.execute("DELETE FROM catmat")
+        else:
+            con.execute("DELETE FROM catser")
         con.commit()
         con.close()
     except Exception:
@@ -80,7 +84,10 @@ async def recarregar_cache(tipo: str = "material"):
     # Popula novamente
     await _popular_cache(tipo)
     con = sqlite3.connect(CACHE_DB)
-    n = con.execute(f"SELECT COUNT(*) FROM {tabela}").fetchone()[0]
+    if tabela == "catmat":
+        n = con.execute("SELECT COUNT(*) FROM catmat").fetchone()[0]
+    else:
+        n = con.execute("SELECT COUNT(*) FROM catser").fetchone()[0]
     con.close()
     return {"mensagem": f"Cache {tipo.upper()} recarregado com sucesso", "total_itens": n}
 

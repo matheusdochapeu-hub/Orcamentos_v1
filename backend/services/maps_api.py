@@ -18,8 +18,8 @@ PLACE_DETAILS_URL = "https://maps.googleapis.com/maps/api/place/details/json"
 TIMEOUT = 20.0
 
 
-def _get_api_key() -> str:
-    key = os.getenv("GOOGLE_MAPS_API_KEY", "")
+def _get_api_key(api_key: str = "") -> str:
+    key = api_key or os.getenv("GOOGLE_MAPS_API_KEY", "")
     if not key or key == "SUA_CHAVE_AQUI":
         raise ValueError(
             "Google Maps API Key não configurada. "
@@ -33,18 +33,18 @@ def _cache_key(params: dict) -> str:
     return hashlib.md5(raw.encode()).hexdigest()
 
 
-async def geocodificar_cidade(cidade: str, estado: str = "") -> dict:
+async def geocodificar_cidade(cidade: str, estado: str = "", api_key: str = "") -> dict:
     """
     Converte nome de cidade em coordenadas lat/lng.
     Retorna: {"lat": float, "lng": float, "endereco_formatado": str}
     """
-    api_key = _get_api_key()
+    key = _get_api_key(api_key)
     endereco = f"{cidade}, {estado}, Brasil" if estado else f"{cidade}, Brasil"
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         r = await client.get(
             GEOCODING_URL,
-            params={"address": endereco, "key": api_key, "language": "pt-BR"},
+            params={"address": endereco, "key": key, "language": "pt-BR"},
         )
         data = r.json()
 
@@ -100,13 +100,14 @@ async def buscar_empresas_nearby(
     lng: float,
     raio_metros: int,
     keyword: str,
+    api_key: str = "",
 ) -> list[dict]:
     """
     Busca empresas no Google Places e filtra pelo raio real (Haversine).
     O Google Places às vezes retorna resultados além do raio — aplicamos
     nosso próprio filtro de distância para garantir a precisão.
     """
-    api_key   = _get_api_key()
+    key       = _get_api_key(api_key)
     empresas  = []
     next_page_token = None
     paginas   = 0
@@ -118,11 +119,11 @@ async def buscar_empresas_nearby(
                 "location": f"{lat},{lng}",
                 "radius":   raio_api,
                 "keyword":  keyword,
-                "key":      api_key,
+                "key":      key,
                 "language": "pt-BR",
             }
             if next_page_token:
-                params = {"pagetoken": next_page_token, "key": api_key}
+                params = {"pagetoken": next_page_token, "key": key}
 
             r    = await client.get(PLACES_NEARBY_URL, params=params)
             data = r.json()
@@ -157,11 +158,12 @@ async def buscar_empresas_text(
     lng: float,
     raio_metros: int,
     query: str,
+    api_key: str = "",
 ) -> list[dict]:
     """
     Busca empresas via Text Search (mais flexível que Nearby para raios > 50km).
     """
-    api_key = _get_api_key()
+    key = _get_api_key(api_key)
     empresas = []
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
@@ -169,7 +171,7 @@ async def buscar_empresas_text(
             "query": query,
             "location": f"{lat},{lng}",
             "radius": min(raio_metros, 50000),
-            "key": api_key,
+            "key": key,
             "language": "pt-BR",
         }
         r = await client.get(PLACES_TEXT_URL, params=params)
@@ -181,12 +183,12 @@ async def buscar_empresas_text(
     return empresas
 
 
-async def obter_detalhes_empresa(place_id: str) -> dict:
+async def obter_detalhes_empresa(place_id: str, api_key: str = "") -> dict:
     """
     Obtém dados detalhados de uma empresa via Place Details.
     Inclui telefone, site, horários, avaliações.
     """
-    api_key = _get_api_key()
+    key = _get_api_key(api_key)
     campos = "name,formatted_address,formatted_phone_number,website,rating,reviews,types,url,opening_hours,editorial_summary"
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
@@ -195,7 +197,7 @@ async def obter_detalhes_empresa(place_id: str) -> dict:
             params={
                 "place_id": place_id,
                 "fields": campos,
-                "key": api_key,
+                "key": key,
                 "language": "pt-BR",
             },
         )
@@ -248,6 +250,7 @@ async def buscar_todas_empresas(
     tipo_cat: str,
     tipo_busca: str,
     max_empresas: int = 50,
+    api_key: str = "",
 ) -> list[dict]:
     """
     Orquestra a busca completa de empresas combinando múltiplas queries.
@@ -264,7 +267,7 @@ async def buscar_todas_empresas(
     else:
         busca_fn = buscar_empresas_nearby
 
-    tarefas = [busca_fn(lat, lng, raio_metros, q) for q in queries]
+    tarefas = [busca_fn(lat, lng, raio_metros, q, api_key=api_key) for q in queries]
     resultados = await asyncio.gather(*tarefas, return_exceptions=True)
 
     # Combinar e deduplicar por place_id
@@ -287,7 +290,7 @@ async def buscar_todas_empresas(
         lote = todas[i : i + lote_size]
         detalhes = await asyncio.gather(
             *[
-                obter_detalhes_empresa(e["place_id"])
+                obter_detalhes_empresa(e["place_id"], api_key=api_key)
                 for e in lote
                 if e.get("place_id")
             ],

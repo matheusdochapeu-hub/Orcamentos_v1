@@ -27,6 +27,7 @@ class SalvarBuscaRequest(BaseModel):
 async def salvar_busca(req: SalvarBuscaRequest):
     """Salva uma busca completa no banco de dados."""
     async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("PRAGMA foreign_keys = ON;")
         cursor = await db.execute(
             """INSERT INTO buscas
                (nome_busca, tipo, catcodigo, catdescricao, cidade, estado, raio_km, tipo_busca, total_empresas)
@@ -116,6 +117,7 @@ async def obter_busca(busca_id: int):
 async def excluir_busca(busca_id: int):
     """Exclui uma busca e todas as empresas associadas."""
     async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("PRAGMA foreign_keys = ON;")
         await db.execute("DELETE FROM buscas WHERE id = ?", (busca_id,))
         await db.commit()
     return {"mensagem": "Busca excluída com sucesso"}

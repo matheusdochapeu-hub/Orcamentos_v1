@@ -40,8 +40,8 @@ def _para_schema(bruto: dict) -> dict:
 class ProvedorGoogle(ProvedorEmpresas):
     nome = "google"
 
-    def disponivel(self) -> bool:
-        chave = os.getenv("GOOGLE_MAPS_API_KEY", "")
+    def disponivel(self, maps_key: str = "") -> bool:
+        chave = maps_key or os.getenv("GOOGLE_MAPS_API_KEY", "")
         return bool(chave and chave != "SUA_CHAVE_AQUI")
 
     async def buscar(
@@ -57,11 +57,13 @@ class ProvedorGoogle(ProvedorEmpresas):
         lat: float | None = None,
         lng: float | None = None,
         max_empresas: int = 50,
+        maps_key: str = "",
         **kwargs,
     ) -> list[dict]:
+        chave = maps_key or kwargs.get("maps_key", "")
         if lat is None or lng is None:
             try:
-                coords = await maps_api.geocodificar_cidade(cidade, estado)
+                coords = await maps_api.geocodificar_cidade(cidade, estado, api_key=chave)
                 lat, lng = coords["lat"], coords["lng"]
             except Exception as e:
                 # Google é fonte complementar: se a geocodificação falhar (chave
@@ -79,5 +81,6 @@ class ProvedorGoogle(ProvedorEmpresas):
             tipo_cat=tipo_cat,
             tipo_busca=tipo_busca,
             max_empresas=max_empresas,
+            api_key=chave,
         )
         return [_para_schema(b) for b in brutos]

@@ -43,6 +43,10 @@ async function fetchJson(url, opcoes) {
 
 // ── Inicialização ────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  // Inicializa estado no History API se não existir
+  if (!history.state || !history.state.etapa) {
+    history.replaceState({ etapa: 1 }, '', '#etapa-1');
+  }
   // Marca o raio padrão como selecionado
   selecionarRaio(10);
   registrarPWA();
@@ -763,6 +767,7 @@ async function salvarBusca() {
 
 async function abrirModalBuscasSalvas() {
   document.getElementById('modal-buscas').classList.add('aberto');
+  history.pushState({ modal: 'modal-buscas', etapa: ESTADO.etapaAtual }, '', '#buscas');
   const container = document.getElementById('lista-buscas-salvas');
   container.innerHTML = '<div class="loading"><div class="spinner"></div><span>Carregando...</span></div>';
   try {
@@ -839,6 +844,7 @@ async function excluirBusca(id, btn) {
 function abrirModalConfig() {
   document.getElementById('config-maps-key').value = localStorage.getItem('maps_key') || '';
   document.getElementById('modal-config').classList.add('aberto');
+  history.pushState({ modal: 'modal-config', etapa: ESTADO.etapaAtual }, '', '#config');
 }
 
 function salvarConfig() {
@@ -864,9 +870,10 @@ function carregarConfig() {
 
 // ═══════════════════ NAVEGAÇÃO ENTRE ETAPAS ══════════════════
 
-function irParaEtapa(etapa) {
+function irParaEtapa(etapa, pushState = true) {
   [1, 2, 3, 4].forEach(n => {
-    document.getElementById(`etapa-${n}`).classList.toggle('hidden', n !== etapa);
+    const el = document.getElementById(`etapa-${n}`);
+    if (el) el.classList.toggle('hidden', n !== etapa);
     const stepEl = document.getElementById(`step-${n}`);
     if (stepEl) {
       stepEl.classList.remove('ativo', 'concluido');
@@ -877,6 +884,9 @@ function irParaEtapa(etapa) {
     if (lineEl) lineEl.classList.toggle('ativa', n < etapa);
   });
   ESTADO.etapaAtual = etapa;
+  if (pushState && (!history.state || history.state.etapa !== etapa || history.state.modal)) {
+    history.pushState({ etapa: etapa }, '', '#etapa-' + etapa);
+  }
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -887,12 +897,25 @@ function voltarEtapa(etapa) {
 // ═══════════════════ MODAIS ══════════════════════════════════
 
 function fecharModal(id) {
-  document.getElementById(id).classList.remove('aberto');
+  const el = document.getElementById(id);
+  if (el) el.classList.remove('aberto');
+  if (history.state && history.state.modal === id) {
+    history.back();
+  }
 }
 
 document.addEventListener('click', e => {
-  if (e.target.classList.contains('modal-overlay')) {
-    e.target.classList.remove('aberto');
+  if (e.target.classList.contains('modal-overlay') && e.target.classList.contains('aberto')) {
+    fecharModal(e.target.id);
+  }
+});
+
+// Listener popstate (History API): suporte ao botão voltar do celular/navegador
+window.addEventListener('popstate', (e) => {
+  document.querySelectorAll('.modal-overlay.aberto').forEach(m => m.classList.remove('aberto'));
+  const etapa = e.state?.etapa || 1;
+  if (etapa !== ESTADO.etapaAtual) {
+    irParaEtapa(etapa, false);
   }
 });
 

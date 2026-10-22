@@ -31,7 +31,7 @@
   --branco:       #FFFBF2;
   --texto:        #22303F;
   --texto-principal:#22303F;
-  --texto-leve:   #6B7A86;
+  --texto-leve:   #475569;
   --sombra:       0 1px 2px rgba(16,33,58,.05), 0 6px 20px rgba(16,33,58,.07);
   --sombra-hover: 0 6px 16px rgba(16,33,58,.10), 0 18px 42px rgba(16,33,58,.14);
   --radius:       14px;
@@ -727,7 +727,7 @@ textarea { resize: vertical; min-height: 80px; }
   .header-text h1 { font-size: 1.12rem; }
   .header-text p { font-size: .72rem; }
   .header-actions { width: 100%; justify-content: stretch; gap: 8px; }
-  .header-actions .btn { flex: 1; justify-content: center; padding: 10px 8px; font-size: .82rem; }
+  .header-actions .btn { flex: 1; justify-content: center; padding: 10px 8px; font-size: .82rem; min-height: 44px; min-width: 44px; }
 
   .main { padding: 18px 12px 56px; }
   .card { padding: 18px 15px; }
@@ -742,8 +742,8 @@ textarea { resize: vertical; min-height: 80px; }
   .acoes-bar .btn { width: 100%; justify-content: center; min-height: 48px; }
   .acoes-bar .resultados-info { margin-left: 0; text-align: center; order: 99; }
 
-  /* Botões em geral com alvo de toque confortável no celular */
-  .btn { min-height: 46px; }
+  /* Botões em geral com alvo de toque WCAG 2.1 AA (min 44x44 px) */
+  .btn, .btn-outline { min-height: 46px; min-width: 44px; }
 
   /* Inputs 16px evitam zoom automático no iOS */
   input[type="text"], input[type="number"], textarea, select { font-size: 16px; padding: 12px 14px; }
@@ -754,11 +754,19 @@ textarea { resize: vertical; min-height: 80px; }
 
   /* Resultados de empresa com mais respiro */
   .empresa-card { padding: 16px; }
-  .empresa-telefone { width: 100%; justify-content: center; }
+  .empresa-telefone { width: 100%; justify-content: center; min-height: 44px; }
 
-  /* Raio: botões em grade de 3 colunas no celular */
-  .raio-grid { display: grid; grid-template-columns: repeat(3, 1fr); }
-  .raio-btn { padding: 12px 6px; text-align: center; }
+  /* Raio: botões em grade de 3 colunas no celular com alvo mínimo 44x44px */
+  .raio-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .raio-btn {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 12px 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
 }
 
 /* Área segura (notch) em celulares */

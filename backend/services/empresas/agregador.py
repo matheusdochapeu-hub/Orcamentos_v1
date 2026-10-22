@@ -64,6 +64,8 @@ async def buscar_empresas_agregado(
     fontes: str = "receita",
     descricao: str = "",
     max_empresas: int = 50,
+    maps_key: str = "",
+    geoapify_key: str = "",
 ) -> dict:
     """
     Orquestra a busca em uma ou mais fontes.
@@ -78,26 +80,29 @@ async def buscar_empresas_agregado(
     ativos: list[str] = []
     for nome in desejadas:
         prov = _PROVEDORES[nome]
-        if prov.disponivel():
+        if nome == "google":
+            if prov.disponivel(maps_key):
+                ativos.append(nome)
+            else:
+                avisos.append("[interno] Google Maps não configurado.")
+        elif nome == "geoapify":
+            if prov.disponivel(geoapify_key):
+                ativos.append(nome)
+        elif prov.disponivel():
             ativos.append(nome)
-        elif nome == "google":
-            # Esperado quando não há chave; marcado como interno (frontend oculta).
-            avisos.append("[interno] Google Maps não configurado.")
 
     if not ativos:
         # fallback garantido: Receita sempre está disponível
         ativos = ["receita"]
 
-    # ORÇAMENTO DE TEMPO POR FONTE (segundos). Cada fonte tem natureza/velocidade
-    # diferente — damos a cada uma seu próprio limite para que UMA fonte lenta
-    # não derrube a busca inteira. Se uma estourar o tempo, seguimos com o que as
-    # outras já trouxeram (degradação graciosa).
+    # ORÇAMENTO DE TEMPO POR FONTE (segundos). Reduzido para evitar estouro
+    # de timeout (504 Gateway Timeout) e atrasos ao usuário.
     _ORCAMENTO = {
-        "receita": 32.0,   # fonte principal (base CNPJ) — mais tempo
-        "pncp": 22.0,      # histórico de contratações
-        "geoapify": 15.0,  # rápido (API dedicada)
-        "osm": 22.0,       # Overpass pode ser pesado
-        "google": 20.0,
+        "receita": 8.0,
+        "pncp": 8.0,
+        "geoapify": 8.0,
+        "osm": 8.0,
+        "google": 8.0,
     }
 
     async def _rodar(nome: str):
@@ -114,8 +119,10 @@ async def buscar_empresas_agregado(
                     raio_km=raio_km,
                     max_empresas=max_empresas,
                     descricao=descricao,
+                    maps_key=maps_key,
+                    geoapify_key=geoapify_key,
                 ),
-                timeout=_ORCAMENTO.get(nome, 20.0),
+                timeout=_ORCAMENTO.get(nome, 8.0),
             )
         except asyncio.TimeoutError:
             return TimeoutError(f"fonte '{nome}' excedeu o tempo e foi ignorada")

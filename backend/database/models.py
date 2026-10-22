@@ -11,11 +11,14 @@ DB_PATH = db_path("orcamentos.db")
 
 
 async def get_db():
-    return await aiosqlite.connect(DB_PATH)
+    db = await aiosqlite.connect(DB_PATH)
+    await db.execute("PRAGMA foreign_keys = ON;")
+    return db
 
 
 async def init_db():
     async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("PRAGMA foreign_keys = ON;")
         await db.executescript("""
             CREATE TABLE IF NOT EXISTS buscas (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
