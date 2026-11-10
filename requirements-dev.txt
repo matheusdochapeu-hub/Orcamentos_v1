@@ -1,0 +1,3 @@
+# Dependências só de desenvolvimento/teste (não vão para produção).
+-r requirements.txt
+pytest==8.3.3

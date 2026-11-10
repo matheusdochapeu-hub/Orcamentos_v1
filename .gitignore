@@ -10,3 +10,13 @@ data/
 *.log
 .DS_Store
 Thumbs.db
+
+# Testes
+tests/_data/
+.pytest_cache/
+.pytest_cache
+*.pytest_cache
+
+# Ambiente virtual
+.venv/
+venv/
