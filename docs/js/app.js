@@ -17,8 +17,10 @@ const ESTADO = {
 
 // Determina a URL base da API do backend.
 // 1. Prioridade para configuração salva no navegador (localStorage: backend_url).
-// 2. Se rodando no GitHub Pages (*.github.io ou *.github.dev), conecta ao backend remoto (Fly.io).
-// 3. Em ambiente local ou servidor integrado, usa a própria origem (window.location.origin).
+// 2. Em ambiente local ou servidor integrado, usa a própria origem (window.location.origin).
+// 3. No GitHub Pages não existe backend embutido: exige URL configurada. Nunca volte a fixar
+//    um host aqui — um domínio público desativado pode ser registrado por terceiros
+//    (subdomain takeover) e passaria a receber todas as requisições deste app.
 function obterApiUrl() {
   const custom = localStorage.getItem('backend_url');
   if (custom && custom.trim()) {
@@ -26,21 +28,29 @@ function obterApiUrl() {
   }
   const host = window.location.hostname;
   if (host.endsWith('github.io') || host.endsWith('github.dev')) {
-    return 'https://orcamentos-publicos.fly.dev';
+    return ''; // sem backend embutido: o usuário informa a URL em ⚙️ Configurações
   }
   return window.location.origin;
 }
 
 let API = obterApiUrl();
 
+// Chamado antes de qualquer requisição: falha com mensagem clara quando não há backend.
+function exigirBackend() {
+  if (!API) {
+    throw new Error('Backend não configurado: abra ⚙️ Configurações e informe a URL do servidor (ex.: https://seu-app.onrender.com). O GitHub Pages hospeda apenas a interface.');
+  }
+}
+
 async function fetchJson(url, opcoes) {
+  exigirBackend();
   let resp;
   try {
     resp = await fetch(url, opcoes);
   } catch (err) {
     const isGH = window.location.hostname.endsWith('github.io') || window.location.hostname.endsWith('github.dev');
-    if (isGH) {
-      throw new Error(`Não foi possível conectar ao backend (${API}). O GitHub Pages hospeda apenas a interface estática e necessita de um servidor Python ativo (Fly.io/Render). Configure a URL em ⚙️ Configurações.`);
+    if (isGH || !API) {
+      throw new Error(`Não foi possível conectar ao backend (${API || 'não configurado'}). O GitHub Pages hospeda apenas a interface estática; informe a URL do servidor em ⚙️ Configurações.`);
     }
     if (window.location.protocol === 'file:') {
       throw new Error('Você abriu o arquivo HTML diretamente (file://). Inicie o sistema pelo INICIAR_SERVIDOR.bat para conectar ao backend.');
@@ -114,6 +124,7 @@ async function aoMudarEstado() {
   try {
     let nomes = _CACHE_MUN[uf];
     if (!nomes) {
+      exigirBackend();
       const resp = await fetch(`${API}/api/localidades/municipios/${uf}`);
       const data = await resp.json();
       nomes = data.municipios || [];
@@ -468,6 +479,7 @@ async function buscarEmpresas() {
       const controller = new AbortController();
       const timeoutId  = setTimeout(() => controller.abort(), TEMPO_MAX);
       try {
+        exigirBackend();
         const resp = await fetch(`${API}/api/empresas/buscar`, {
           method: 'POST',
           signal: controller.signal,
@@ -737,6 +749,7 @@ async function exportar(formato) {
   const item = ESTADO.itemSelecionado;
   toast(`Gerando ${formato.toUpperCase()}...`, 'info');
   try {
+    exigirBackend();
     const resp = await fetch(`${API}/api/export/${formato}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
